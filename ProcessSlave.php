@@ -11,6 +11,7 @@ use React\Socket\Server;
 
 class ProcessSlave
 {
+    const PING_TIMEOUT = 5;
 
     /**
      * @var \React\EventLoop\LibEventLoop|\React\EventLoop\StreamSelectLoop
@@ -84,31 +85,29 @@ class ProcessSlave
 
     public function connectToMaster()
     {
+        $bornIn = date('Y-m-d H:i:s O');
+
         $this->loop = Factory::create();
         $this->client = stream_socket_client('tcp://127.0.0.1:5500');
         $this->connection = new Connection($this->client, $this->loop);
 
         /** @noinspection PhpParamsInspection */
-        $this->loop->addPeriodicTimer(1, \Closure::bind(function () {
+        $this->loop->addPeriodicTimer(self::PING_TIMEOUT, \Closure::bind(function () use ($bornIn) {
             $result = $this->connection->write(json_encode([
-                'cmd'    => 'ping',
-                'pid'    => getmypid(),
-                'memory' => memory_get_usage(true),
+                'cmd'     => 'ping',
+                'pid'     => getmypid(),
+                'memory'  => memory_get_usage(true),
+                'born_at' => $bornIn,
+                'ping_at' => date('Y-m-d H:i:s O'),
             ]));
             if (!$result) {
                 $this->loop->stop();
             }
         }, $this));
 
-        $this->connection->on(
-            'close',
-            \Closure::bind(
-                function () {
-                    $this->shutdown();
-                },
-                $this
-            )
-        );
+        $this->connection->on('close', \Closure::bind(function () {
+            $this->shutdown();
+        }, $this));
 
         $socket = new Server($this->loop);
         $http = new \React\Http\Server($socket);
@@ -120,6 +119,7 @@ class ProcessSlave
                 $socket->listen($port);
                 break;
             } catch (ConnectionException $e) {
+                echo sprintf("Unable connection to %s: %s\n", $port, $e->getMessage());
                 $port++;
             }
         }

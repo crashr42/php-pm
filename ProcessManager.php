@@ -153,7 +153,7 @@ class ProcessManager
         $http = new \React\Http\Server($this->controller);
         $http->on('request', \Closure::bind(function (Request $request, Response $response) {
             $response->writeHead();
-            $response->end(json_encode($this->status(), JSON_PRETTY_PRINT));
+            $response->end(json_encode($this->status()));
         }, $this));
 
         $this->web = new Server($this->loop);
@@ -286,6 +286,8 @@ class ProcessManager
         foreach ($this->slaves as &$slave) {
             if ($slave['pid'] === $data['pid']) {
                 $slave['memory'] = $data['memory'];
+                $slave['born_at'] = $data['born_at'];
+                $slave['ping_at'] = $data['ping_at'];
                 break;
             }
         }
@@ -355,7 +357,6 @@ class ProcessManager
     {
         $pid = pcntl_fork();
         if (!$pid) {
-            echo 'fork'.PHP_EOL;
 //            try {
             //we're in the slave now
             new ProcessSlave($this->getBridge(), $this->appBootstrap, $this->appenv);
