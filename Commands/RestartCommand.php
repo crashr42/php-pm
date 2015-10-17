@@ -1,4 +1,10 @@
 <?php
+/**
+ * Created by PhpStorm.
+ * User: nikita
+ * Date: 17.10.15
+ * Time: 20:45
+ */
 
 namespace PHPPM\Commands;
 
@@ -7,7 +13,7 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
-class StatusCommand extends Command
+class RestartCommand extends Command
 {
     /**
      * {@inheritdoc}
@@ -18,15 +24,15 @@ class StatusCommand extends Command
         parent::configure();
 
         $this
-            ->setName('status')
+            ->setName('restart')
             ->addArgument('working-directory', null, 'working directory', './')
-            ->setDescription('Status of all processes');
+            ->setDescription('Restart of all processes');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $handler = new Client();
-        $handler->getStatus(function ($status) {
+        $handler->restart(function ($status) {
             echo json_encode($status).PHP_EOL;
         });
     }

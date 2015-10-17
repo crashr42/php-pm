@@ -13,6 +13,7 @@ class StartCommand extends Command
 {
     /**
      * {@inheritdoc}
+     * @throws \InvalidArgumentException
      */
     protected function configure()
     {
@@ -68,7 +69,7 @@ class StartCommand extends Command
     private function defaultOrConfig($config, $name, $default) {
         $val = $default;
 
-        if (isset($config[$name])) {
+        if (array_key_exists($name, $config)) {
             $val = $config[$name];
         }
 

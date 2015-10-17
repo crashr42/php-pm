@@ -18,6 +18,7 @@ if ((!$loader = includeIfExists(__DIR__.'/../vendor/autoload.php')) && (!$loader
     );
 }
 
+use PHPPM\Commands\RestartCommand;
 use Symfony\Component\Console\Application;
 use PHPPM\Commands\StartCommand;
 use PHPPM\Commands\StatusCommand;
@@ -25,4 +26,5 @@ use PHPPM\Commands\StatusCommand;
 $app = new Application('PHP-PM');
 $app->add(new StartCommand);
 $app->add(new StatusCommand);
+$app->add(new RestartCommand());
 $app->run();

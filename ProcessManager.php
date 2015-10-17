@@ -2,6 +2,13 @@
 
 namespace PHPPM;
 
+use React\EventLoop\Factory;
+use React\Http\Request;
+use React\Http\Response;
+use React\Socket\Connection;
+use React\Socket\Server;
+use React\Stream\Stream;
+
 class ProcessManager
 {
     /**
@@ -15,12 +22,12 @@ class ProcessManager
     protected $loop;
 
     /**
-     * @var \React\Socket\Server
+     * @var Server
      */
     protected $controller;
 
     /**
-     * @var \React\Socket\Server
+     * @var Server
      */
     protected $web;
 
@@ -71,7 +78,7 @@ class ProcessManager
      */
     protected $port = 8080;
 
-    function __construct($port = 8080, $host = '127.0.0.1', $slaveCount = 8)
+    public function __construct($port = 8080, $host = '127.0.0.1', $slaveCount = 8)
     {
         $this->slaveCount = $slaveCount;
         $this->host = $host;
@@ -86,7 +93,6 @@ class ProcessManager
 
         if (!pcntl_fork()) {
             $this->run();
-        } else {
         }
     }
 
@@ -140,13 +146,18 @@ class ProcessManager
 
     public function run()
     {
-        $this->loop = \React\EventLoop\Factory::create();
-        $this->controller = new \React\Socket\Server($this->loop);
-        $this->controller->on('connection', array($this, 'onSlaveConnection'));
+        $this->loop = Factory::create();
+        $this->controller = new Server($this->loop);
+        $this->controller->on('connection', [$this, 'onSlaveConnection']);
         $this->controller->listen(5500);
+        $http = new \React\Http\Server($this->controller);
+        $http->on('request', \Closure::bind(function (Request $request, Response $response) {
+            $response->writeHead();
+            $response->end(json_encode($this->status(), JSON_PRETTY_PRINT));
+        }, $this));
 
-        $this->web = new \React\Socket\Server($this->loop);
-        $this->web->on('connection', array($this, 'onWeb'));
+        $this->web = new Server($this->loop);
+        $this->web->on('connection', [$this, 'onWeb']);
         $this->web->listen($this->port, $this->host);
 
         for ($i = 0; $i < $this->slaveCount; $i++) {
@@ -157,12 +168,15 @@ class ProcessManager
         $this->loop();
     }
 
-    public function onWeb(\React\Socket\Connection $incoming)
+    public function onWeb(Connection $incoming)
     {
-        $slaveId = $this->getNextSlave();
-        $port = $this->slaves[$slaveId]['port'];
-        $client = stream_socket_client('tcp://127.0.0.1:' . $port);
-        $redirect = new \React\Stream\Stream($client, $this->loop);
+        do {
+            $slaves = array_values($this->slaves);
+            $slaveId = $this->getNextSlave();
+        } while (!array_key_exists($slaveId, $slaves));
+        $port = $slaves[$slaveId]['port'];
+        $client = stream_socket_client('tcp://127.0.0.1:'.$port);
+        $redirect = new Stream($client, $this->loop);
 
         $redirect->on(
             'close',
@@ -194,7 +208,7 @@ class ProcessManager
         $count = count($this->slaves);
 
         $this->index++;
-        if ($count === $this->index) {
+        if ($count >= $this->index) {
             //end
             $this->index = 0;
         }
@@ -202,7 +216,7 @@ class ProcessManager
         return $this->index;
     }
 
-    public function onSlaveConnection(\React\Socket\Connection $conn)
+    public function onSlaveConnection(Connection $conn)
     {
         $conn->on(
             'data',
@@ -219,9 +233,9 @@ class ProcessManager
                 function () use ($conn) {
                     foreach ($this->slaves as $idx => $slave) {
                         if ($slave['connection'] === $conn) {
-                            unset($this->slaves[$idx]);
+                            $this->removeSlave($idx);
                             $this->checkSlaves();
-                            pcntl_waitpid($slave['pid'], $pidStatus);
+                            pcntl_waitpid($slave['pid'], $pidStatus, WNOHANG);
                         }
                     }
                 },
@@ -230,38 +244,64 @@ class ProcessManager
         );
     }
 
-    public function onData($data, $conn)
+    public function onData($data, Connection $conn)
     {
         $this->processMessage($data, $conn);
     }
 
-    public function processMessage($data, $conn)
+    public function processMessage($data, Connection $conn)
     {
         $data = json_decode($data, true);
 
-        $method = 'command' . ucfirst($data['cmd']);
-        if (is_callable(array($this, $method))) {
+        $method = 'command'.ucfirst($data['cmd']);
+        if (is_callable([$this, $method])) {
             $this->$method($data, $conn);
         }
     }
 
-    protected function commandStatus($options, $conn)
+    private function status()
     {
-        $result['activeSlaves'] = count($this->slaves);
-        $conn->end(json_encode($result));
+        $result['port'] = 5000;
+        $result['slaves'] = array_map(function ($slave) {
+            return array_diff_key($slave, ['connection' => null]);
+        }, $this->slaves);
+
+        return $result;
     }
 
-    protected function commandRegister(array $data, $conn)
+    protected function commandRestart(array $data, Connection $conn)
+    {
+        $conn->end('not supported');
+    }
+
+    protected function commandStatus(array $data, Connection $conn)
+    {
+        $response = json_encode($this->status());
+        printf("%s\n", $response);
+        $conn->end($response);
+    }
+
+    protected function commandPing(array $data, Connection $conn)
+    {
+        foreach ($this->slaves as &$slave) {
+            if ($slave['pid'] === $data['pid']) {
+                $slave['memory'] = $data['memory'];
+                break;
+            }
+        }
+    }
+
+    protected function commandRegister(array $data, Connection $conn)
     {
         $pid = (int)$data['pid'];
         $port = (int)$data['port'];
-        $this->slaves[] = array(
-            'pid' => $pid,
-            'port' => $port,
-            'connection' => $conn
-        );
+        $this->slaves[] = [
+            'pid'        => $pid,
+            'port'       => $port,
+            'connection' => $conn,
+        ];
         if ($this->waitForSlaves && $this->slaveCount === count($this->slaves)) {
-            $slaves = array();
+            $slaves = [];
             foreach ($this->slaves as $slave) {
                 $slaves[] = $slave['port'];
             }
@@ -275,11 +315,19 @@ class ProcessManager
         echo sprintf("Slave died. (pid %d)\n", $pid);
         foreach ($this->slaves as $idx => $slave) {
             if ($slave['pid'] === $pid) {
-                unset($this->slaves[$idx]);
+                $this->removeSlave($idx);
                 $this->checkSlaves();
             }
         }
         $this->checkSlaves();
+    }
+
+    protected function removeSlave($idx)
+    {
+        $slave = $this->slaves[$idx];
+        echo sprintf("Die slave %s on port %s\n", $slave['pid'], $slave['port']);
+        $slave['connection']->close();
+        unset($this->slaves[$idx]);
     }
 
     protected function checkSlaves()
@@ -298,17 +346,22 @@ class ProcessManager
         }
     }
 
-    function loop()
+    private function loop()
     {
         $this->loop->run();
     }
 
-    function newInstance()
+    private function newInstance()
     {
         $pid = pcntl_fork();
         if (!$pid) {
+            echo 'fork'.PHP_EOL;
+//            try {
             //we're in the slave now
             new ProcessSlave($this->getBridge(), $this->appBootstrap, $this->appenv);
+//            } catch (\Exception $e) {
+//                echo $e->getMessage().PHP_EOL;
+//            }
             exit;
         }
     }

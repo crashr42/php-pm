@@ -4,6 +4,9 @@
         "symfony/console": "~2.6",
         "react/react": "0.4.*"
     },
+    "require-dev": {
+        "phpunit/phpunit": "~4.0"
+    },
     "autoload": {
         "psr-4": {
             "PHPPM\\": ""

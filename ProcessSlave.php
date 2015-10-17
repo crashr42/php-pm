@@ -2,6 +2,13 @@
 
 namespace PHPPM;
 
+use React\EventLoop\Factory;
+use React\Http\Request;
+use React\Http\Response;
+use React\Socket\Connection;
+use React\Socket\ConnectionException;
+use React\Socket\Server;
+
 class ProcessSlave
 {
 
@@ -16,7 +23,7 @@ class ProcessSlave
     protected $client;
 
     /**
-     * @var \React\Socket\Connection
+     * @var Connection
      */
     protected $connection;
 
@@ -77,9 +84,21 @@ class ProcessSlave
 
     public function connectToMaster()
     {
-        $this->loop = \React\EventLoop\Factory::create();
+        $this->loop = Factory::create();
         $this->client = stream_socket_client('tcp://127.0.0.1:5500');
-        $this->connection = new \React\Socket\Connection($this->client, $this->loop);
+        $this->connection = new Connection($this->client, $this->loop);
+
+        /** @noinspection PhpParamsInspection */
+        $this->loop->addPeriodicTimer(1, \Closure::bind(function () {
+            $result = $this->connection->write(json_encode([
+                'cmd'    => 'ping',
+                'pid'    => getmypid(),
+                'memory' => memory_get_usage(true),
+            ]));
+            if (!$result) {
+                $this->loop->stop();
+            }
+        }, $this));
 
         $this->connection->on(
             'close',
@@ -91,27 +110,27 @@ class ProcessSlave
             )
         );
 
-        $socket = new \React\Socket\Server($this->loop);
+        $socket = new Server($this->loop);
         $http = new \React\Http\Server($socket);
-        $http->on('request', array($this, 'onRequest'));
+        $http->on('request', [$this, 'onRequest']);
 
         $port = 5501;
         while ($port < 5600) {
             try {
                 $socket->listen($port);
                 break;
-            } catch( \React\Socket\ConnectionException $e ) {
+            } catch (ConnectionException $e) {
                 $port++;
             }
         }
 
-        $this->connection->write(json_encode(array('cmd' => 'register', 'pid' => getmypid(), 'port' => $port)));
+        $this->connection->write(json_encode(['cmd' => 'register', 'pid' => getmypid(), 'port' => $port]));
     }
 
-    public function onRequest(\React\Http\Request $request, \React\Http\Response $response)
+    public function onRequest(Request $request, Response $response)
     {
         if ($bridge = $this->getBridge()) {
-            return $bridge->onRequest($request, $response);
+            $bridge->onRequest($request, $response);
         } else {
             $response->writeHead('404');
             $response->end('No Bridge Defined.');
@@ -121,7 +140,7 @@ class ProcessSlave
     public function bye()
     {
         if ($this->connection->isWritable()) {
-            $this->connection->write(json_encode(array('cmd' => 'unregister', 'pid' => getmypid())));
+            $this->connection->write(json_encode(['cmd' => 'unregister', 'pid' => getmypid()]));
             $this->connection->close();
         }
         $this->loop->stop();
