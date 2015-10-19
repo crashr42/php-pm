@@ -168,36 +168,37 @@ class ProcessManager
         $this->loop();
     }
 
+    /**
+     * TODO: Балансировка на чем-то спотыкается при большом кол-ве запросов.
+     *
+     * @param Connection $incoming
+     */
     public function onWeb(Connection $incoming)
     {
         do {
             $slaves = array_values($this->slaves);
             $slaveId = $this->getNextSlave();
         } while (!array_key_exists($slaveId, $slaves));
+
         $port = $slaves[$slaveId]['port'];
         $client = stream_socket_client('tcp://127.0.0.1:'.$port);
         $redirect = new Stream($client, $this->loop);
 
-        $redirect->on(
-            'close',
-            function () use ($incoming) {
-                $incoming->end();
-            }
-        );
+        $incoming->on('close', function () use ($redirect) {
+            $redirect->end();
+        });
 
-        $incoming->on(
-            'data',
-            function ($data) use ($redirect) {
-                $redirect->write($data);
-            }
-        );
+        $redirect->on('close', function () use ($incoming) {
+            $incoming->end();
+        });
 
-        $redirect->on(
-            'data',
-            function ($data) use ($incoming) {
-                $incoming->write($data);
-            }
-        );
+        $incoming->on('data', function ($data) use ($redirect) {
+            $redirect->write($data);
+        });
+
+        $redirect->on('data', function ($data) use ($incoming) {
+            $incoming->write($data);
+        });
     }
 
     /**
@@ -218,30 +219,18 @@ class ProcessManager
 
     public function onSlaveConnection(Connection $conn)
     {
-        $conn->on(
-            'data',
-            \Closure::bind(
-                function ($data) use ($conn) {
-                    $this->onData($data, $conn);
-                },
-                $this
-            )
-        );
-        $conn->on(
-            'close',
-            \Closure::bind(
-                function () use ($conn) {
-                    foreach ($this->slaves as $idx => $slave) {
-                        if ($slave['connection'] === $conn) {
-                            $this->removeSlave($idx);
-                            $this->checkSlaves();
-                            pcntl_waitpid($slave['pid'], $pidStatus, WNOHANG);
-                        }
-                    }
-                },
-                $this
-            )
-        );
+        $conn->on('data', \Closure::bind(function ($data) use ($conn) {
+            $this->onData($data, $conn);
+        }, $this));
+        $conn->on('close', \Closure::bind(function () use ($conn) {
+            foreach ($this->slaves as $idx => $slave) {
+                if ($slave['connection'] === $conn) {
+                    $this->removeSlave($idx);
+                    $this->checkSlaves();
+                    pcntl_waitpid($slave['pid'], $pidStatus, WNOHANG);
+                }
+            }
+        }, $this));
     }
 
     public function onData($data, Connection $conn)
@@ -271,7 +260,23 @@ class ProcessManager
 
     protected function commandRestart(array $data, Connection $conn)
     {
-        $conn->end('not supported');
+        $slaves = $this->slaves;
+
+        $this->gracefulRestart(array_pop($slaves), $slaves, $conn);
+    }
+
+    private function gracefulRestart($slave, $slaves, Connection $client)
+    {
+        /** @var Connection $connection */
+        $connection = $slave['connection'];
+        $connection->on('close', \Closure::bind(function () use ($slaves, $connection, $client) {
+            if (count($slaves) > 0) {
+                $this->gracefulRestart(array_pop($slaves), $slaves, $client);
+            } else {
+                $client->end();
+            }
+        }, $this));
+        $connection->write(json_encode(['cmd' => 'restart']));
     }
 
     protected function commandStatus(array $data, Connection $conn)
@@ -295,20 +300,33 @@ class ProcessManager
 
     protected function commandRegister(array $data, Connection $conn)
     {
+        // TODO: костыль, slave процессов создается больше чем нужно в checkSlaves
+        if (count($this->slaves) === $this->slaveCount) {
+            $conn->end();
+
+            return;
+        }
+
         $pid = (int)$data['pid'];
         $port = (int)$data['port'];
-        $this->slaves[] = [
+        $newSlave = [
             'pid'        => $pid,
             'port'       => $port,
             'connection' => $conn,
         ];
-        if ($this->waitForSlaves && $this->slaveCount === count($this->slaves)) {
-            $slaves = [];
-            foreach ($this->slaves as $slave) {
-                $slaves[] = $slave['port'];
+        $exists = false;
+        foreach ($this->slaves as $slave) {
+            if ($slave['port'] === $newSlave['port']) {
+                $exists = true;
+                break;
             }
-            echo sprintf("%d slaves (%s) up and ready.\n", $this->slaveCount, implode(', ', $slaves));
         }
+        if (!$exists) {
+            $this->slaves[] = $newSlave;
+        }
+        echo sprintf("%d slaves (%s) up and ready.\n", count($this->slaves), implode(',', array_map(function ($slave) {
+            return $slave['port'];
+        }, $this->slaves)));
     }
 
     protected function commandUnregister(array $data)
@@ -332,6 +350,10 @@ class ProcessManager
         unset($this->slaves[$idx]);
     }
 
+    /**
+     * TODO: возможно ситуация при которой кол-во slave процессов создастся больше чем нужно,
+     * TODO: из-за того что уже созданные еще не успели зарегаться.
+     */
     protected function checkSlaves()
     {
         if (!$this->run) {
@@ -339,13 +361,20 @@ class ProcessManager
         }
 
         $i = count($this->slaves);
-        if ($this->slaveCount !== $i) {
-            echo sprintf('Boot %d new slaves ... ', $this->slaveCount - $i);
+        if ($this->slaveCount > $i) {
+            echo sprintf("Boot %d new slaves ... \n", $this->slaveCount - $i);
             $this->waitForSlaves = true;
             for (; $i < $this->slaveCount; $i++) {
                 $this->newInstance();
             }
         }
+    }
+
+    protected function activeSlaves()
+    {
+        return array_filter($this->slaves, function ($slave) {
+            return !array_key_exists('die', $slave);
+        });
     }
 
     private function loop()
@@ -357,12 +386,7 @@ class ProcessManager
     {
         $pid = pcntl_fork();
         if (!$pid) {
-//            try {
-            //we're in the slave now
             new ProcessSlave($this->getBridge(), $this->appBootstrap, $this->appenv);
-//            } catch (\Exception $e) {
-//                echo $e->getMessage().PHP_EOL;
-//            }
             exit;
         }
     }

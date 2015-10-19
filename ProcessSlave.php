@@ -43,6 +43,11 @@ class ProcessSlave
      */
     protected $appenv;
 
+    /**
+     * @var bool
+     */
+    protected $restarting = false;
+
     public function __construct($bridgeName = null, $appBootstrap, $appenv)
     {
         $this->bridgeName = $bridgeName;
@@ -105,6 +110,14 @@ class ProcessSlave
             }
         }, $this));
 
+        $this->connection->on('data', \Closure::bind(function ($data) {
+            $data = json_decode($data, true);
+            if ($data['cmd'] === 'restart') {
+                echo sprintf("Shutdown %s\n", getmypid());
+                $this->shutdown();
+            }
+        }, $this));
+
         $this->connection->on('close', \Closure::bind(function () {
             $this->shutdown();
         }, $this));
@@ -119,7 +132,6 @@ class ProcessSlave
                 $socket->listen($port);
                 break;
             } catch (ConnectionException $e) {
-                echo sprintf("Unable connection to %s: %s\n", $port, $e->getMessage());
                 $port++;
             }
         }
