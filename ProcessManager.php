@@ -312,6 +312,12 @@ class ProcessManager
         }
     }
 
+    protected function commandStop(array $data, Connection $conn)
+    {
+        $conn->end();
+        exit;
+    }
+
     protected function commandRegister(array $data, Connection $conn)
     {
         // TODO: костыль, slave процессов создается больше чем нужно в checkSlaves

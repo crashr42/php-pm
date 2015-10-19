@@ -78,4 +78,9 @@ class Client
     {
         $this->request('restart', [], $callback);
     }
+
+    public function stop($callback)
+    {
+        $this->request('stop', [], $callback);
+    }
 }
