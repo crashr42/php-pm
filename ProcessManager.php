@@ -176,7 +176,7 @@ class ProcessManager
     public function onWeb(Connection $incoming)
     {
         do {
-            $slaves = array_values($this->slaves);
+            $slaves = array_values($this->activeSlaves());
             $slaveId = $this->getNextSlave();
         } while (!array_key_exists($slaveId, $slaves));
 
@@ -214,7 +214,7 @@ class ProcessManager
      */
     protected function getNextSlave()
     {
-        $count = count($this->slaves);
+        $count = count($this->activeSlaves());
 
         $this->index++;
         if ($count >= $this->index) {
@@ -275,6 +275,12 @@ class ProcessManager
 
     private function gracefulRestart($slave, $slaves, Connection $client)
     {
+        foreach ($this->slaves as $idx => $origSlave) {
+            if ($slave === $origSlave) {
+                $this->slaves[$idx]['die'] = true;
+            }
+        }
+
         /** @var Connection $connection */
         $connection = $slave['connection'];
         $connection->on('close', \Closure::bind(function () use ($slaves, $connection, $client) {
