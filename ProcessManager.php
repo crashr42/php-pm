@@ -188,12 +188,20 @@ class ProcessManager
             $redirect->end();
         });
 
-        $redirect->on('close', function () use ($incoming) {
-            $incoming->end();
+        $incoming->on('error', function () use ($redirect) {
+            $redirect->end();
         });
 
         $incoming->on('data', function ($data) use ($redirect) {
             $redirect->write($data);
+        });
+
+        $redirect->on('close', function () use ($incoming) {
+            $incoming->end();
+        });
+
+        $redirect->on('error', function () use ($incoming) {
+            $incoming->end();
         });
 
         $redirect->on('data', function ($data) use ($incoming) {

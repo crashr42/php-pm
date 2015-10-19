@@ -12,6 +12,7 @@ use React\Socket\Server;
 class ProcessSlave
 {
     const PING_TIMEOUT = 5;
+    const RESTARTING_TIMEOUT = 1;
 
     /**
      * @var \React\EventLoop\LibEventLoop|\React\EventLoop\StreamSelectLoop
@@ -47,6 +48,11 @@ class ProcessSlave
      * @var bool
      */
     protected $restarting = false;
+
+    /**
+     * @var bool
+     */
+    protected $processing = false;
 
     public function __construct($bridgeName = null, $appBootstrap, $appenv)
     {
@@ -109,12 +115,18 @@ class ProcessSlave
                 $this->loop->stop();
             }
         }, $this));
+        /** @noinspection PhpParamsInspection */
+        $this->loop->addPeriodicTimer(self::RESTARTING_TIMEOUT, \Closure::bind(function () {
+            if ($this->restarting && !$this->processing) {
+                echo sprintf("Shutdown %s\n", getmypid());
+                $this->shutdown();
+            }
+        }, $this));
 
         $this->connection->on('data', \Closure::bind(function ($data) {
             $data = json_decode($data, true);
             if ($data['cmd'] === 'restart') {
-                echo sprintf("Shutdown %s\n", getmypid());
-                $this->shutdown();
+                $this->restarting = true;
             }
         }, $this));
 
@@ -141,12 +153,14 @@ class ProcessSlave
 
     public function onRequest(Request $request, Response $response)
     {
+        $this->processing = true;
         if ($bridge = $this->getBridge()) {
             $bridge->onRequest($request, $response);
         } else {
             $response->writeHead('404');
             $response->end('No Bridge Defined.');
         }
+        $this->processing = false;
     }
 
     public function bye()
