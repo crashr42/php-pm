@@ -54,8 +54,20 @@ class ProcessSlave
      */
     protected $processing = false;
 
-    public function __construct($bridgeName = null, $appBootstrap, $appenv)
+    /**
+     * @var string
+     */
+    private $ppmHost;
+
+    /**
+     * @var int
+     */
+    private $ppmPort;
+
+    public function __construct($ppmHost, $ppmPort, $bridgeName = null, $appBootstrap, $appenv)
     {
+        $this->ppmHost = $ppmHost;
+        $this->ppmPort = $ppmPort;
         $this->bridgeName = $bridgeName;
         $this->bootstrap($appBootstrap, $appenv);
         $this->connectToMaster();
@@ -99,7 +111,7 @@ class ProcessSlave
         $bornIn = date('Y-m-d H:i:s O');
 
         $this->loop = Factory::create();
-        $this->client = stream_socket_client('tcp://127.0.0.1:5500');
+        $this->client = stream_socket_client(sprintf('tcp://%s:%s', $this->ppmHost, $this->ppmPort));
         $this->connection = new Connection($this->client, $this->loop);
 
         /** @noinspection PhpParamsInspection */

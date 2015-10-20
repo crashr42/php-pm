@@ -181,7 +181,7 @@ class ProcessManager
         } while (!array_key_exists($slaveId, $slaves));
 
         $port = $slaves[$slaveId]['port'];
-        $client = stream_socket_client('tcp://127.0.0.1:'.$port);
+        $client = stream_socket_client(sprintf('tcp://%s:%s', $this->host, $port));
         $redirect = new Stream($client, $this->loop);
 
         $incoming->on('close', function () use ($redirect) {
@@ -406,7 +406,7 @@ class ProcessManager
     {
         $pid = pcntl_fork();
         if (!$pid) {
-            new ProcessSlave($this->getBridge(), $this->appBootstrap, $this->appenv);
+            new ProcessSlave($this->host, $this->port, $this->getBridge(), $this->appBootstrap, $this->appenv);
             exit;
         }
     }
