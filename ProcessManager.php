@@ -149,7 +149,7 @@ class ProcessManager
         $this->loop = Factory::create();
         $this->controller = new Server($this->loop);
         $this->controller->on('connection', [$this, 'onSlaveConnection']);
-        $this->controller->listen(5500);
+        $this->controller->listen(5500, $this->host);
         $http = new \React\Http\Server($this->controller);
         $http->on('request', \Closure::bind(function (Request $request, Response $response) {
             $response->writeHead();

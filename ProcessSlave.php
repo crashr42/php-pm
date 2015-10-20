@@ -153,7 +153,7 @@ class ProcessSlave
         $port = 5501;
         while ($port < 5600) {
             try {
-                $socket->listen($port);
+                $socket->listen($port, $this->ppmHost);
                 break;
             } catch (ConnectionException $e) {
                 $port++;
