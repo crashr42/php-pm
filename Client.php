@@ -4,6 +4,7 @@ namespace PHPPM;
 
 use React\EventLoop\Factory;
 use React\Socket\Connection;
+use React\Socket\ConnectionException;
 
 class Client
 {
@@ -30,6 +31,7 @@ class Client
 
     /**
      * @return Connection
+     * @throws ConnectionException
      */
     protected function getConnection()
     {
@@ -37,7 +39,10 @@ class Client
             $this->connection->close();
             unset($this->connection);
         }
-        $client = stream_socket_client('tcp://127.0.0.1:'.$this->controllerPort);
+        $client = @stream_socket_client('tcp://127.0.0.1:'.$this->controllerPort);
+        if (!$client) {
+            throw new ConnectionException('Please pass valid port.');
+        }
         $this->connection = new Connection($client, $this->loop);
 
         return $this->connection;

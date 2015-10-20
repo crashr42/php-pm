@@ -64,6 +64,11 @@ class ProcessSlave
      */
     private $ppmPort;
 
+    /**
+     * @var int
+     */
+    private $port;
+
     public function __construct($ppmHost, $ppmPort, $bridgeName = null, $appBootstrap, $appenv)
     {
         $this->ppmHost = $ppmHost;
@@ -76,7 +81,7 @@ class ProcessSlave
 
     protected function shutdown()
     {
-        echo "SHUTTING SLAVE PROCESS DOWN\n";
+        echo sprintf("Shutting slave process down (http://%s:%s)\n", $this->ppmHost, $this->port);
         $this->bye();
         exit;
     }
@@ -108,19 +113,19 @@ class ProcessSlave
 
     public function connectToMaster()
     {
-        $bornIn = date('Y-m-d H:i:s O');
+        $bornAt = date('Y-m-d H:i:s O');
 
         $this->loop = Factory::create();
         $this->client = stream_socket_client(sprintf('tcp://%s:%s', $this->ppmHost, $this->ppmPort));
         $this->connection = new Connection($this->client, $this->loop);
 
         /** @noinspection PhpParamsInspection */
-        $this->loop->addPeriodicTimer(self::PING_TIMEOUT, \Closure::bind(function () use ($bornIn) {
+        $this->loop->addPeriodicTimer(self::PING_TIMEOUT, \Closure::bind(function () use ($bornAt) {
             $result = $this->connection->write(json_encode([
                 'cmd'     => 'ping',
                 'pid'     => getmypid(),
                 'memory'  => memory_get_usage(true),
-                'born_at' => $bornIn,
+                'born_at' => $bornAt,
                 'ping_at' => date('Y-m-d H:i:s O'),
             ]));
             if (!$result) {
@@ -150,10 +155,13 @@ class ProcessSlave
         $http = new \React\Http\Server($socket);
         $http->on('request', [$this, 'onRequest']);
 
-        $port = 5501;
-        while ($port < 5600) {
+        $port = $this->ppmPort;
+        $maxPort = $port + 100;
+        while ($port < $maxPort) {
             try {
                 $socket->listen($port, $this->ppmHost);
+                $this->port = $port;
+                echo sprintf("Listen worker on uri http://%s:%s\n", $this->ppmHost, $port);
                 break;
             } catch (ConnectionException $e) {
                 $port++;

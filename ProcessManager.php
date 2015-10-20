@@ -149,7 +149,7 @@ class ProcessManager
         $this->loop = Factory::create();
         $this->controller = new Server($this->loop);
         $this->controller->on('connection', [$this, 'onSlaveConnection']);
-        $this->controller->listen(5500, $this->host);
+        $this->controller->listen($this->port, $this->host);
         $http = new \React\Http\Server($this->controller);
         $http->on('request', \Closure::bind(function (Request $request, Response $response) {
             $response->writeHead();
@@ -158,7 +158,7 @@ class ProcessManager
 
         $this->web = new Server($this->loop);
         $this->web->on('connection', [$this, 'onWeb']);
-        $this->web->listen($this->port, $this->host);
+        $this->web->listen($this->port + 1, $this->host);
 
         for ($i = 0; $i < $this->slaveCount; $i++) {
             $this->newInstance();
@@ -258,12 +258,9 @@ class ProcessManager
 
     private function status()
     {
-        $result['port'] = 5000;
-        $result['slaves'] = array_map(function ($slave) {
+        return ['slaves' => array_map(function ($slave) {
             return array_diff_key($slave, ['connection' => null]);
-        }, $this->slaves);
-
-        return $result;
+        }, $this->slaves)];
     }
 
     protected function commandRestart(array $data, Connection $conn)
@@ -332,6 +329,7 @@ class ProcessManager
         $newSlave = [
             'pid'        => $pid,
             'port'       => $port,
+            'host'       => $this->host,
             'connection' => $conn,
         ];
         $exists = false;
@@ -342,11 +340,9 @@ class ProcessManager
             }
         }
         if (!$exists) {
+            echo sprintf("New slave %s up and ready.\n", $newSlave['port']);
             $this->slaves[] = $newSlave;
         }
-        echo sprintf("%d slaves (%s) up and ready.\n", count($this->slaves), implode(',', array_map(function ($slave) {
-            return $slave['port'];
-        }, $this->slaves)));
     }
 
     protected function commandUnregister(array $data)
@@ -382,7 +378,6 @@ class ProcessManager
 
         $i = count($this->slaves);
         if ($this->slaveCount > $i) {
-            echo sprintf("Boot %d new slaves ... \n", $this->slaveCount - $i);
             $this->waitForSlaves = true;
             for (; $i < $this->slaveCount; $i++) {
                 $this->newInstance();

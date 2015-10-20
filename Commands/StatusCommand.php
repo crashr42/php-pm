@@ -4,6 +4,7 @@ namespace PHPPM\Commands;
 
 use PHPPM\Client;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
@@ -19,13 +20,13 @@ class StatusCommand extends Command
 
         $this
             ->setName('status')
-            ->addArgument('working-directory', null, 'working directory', './')
+            ->addArgument('port', InputArgument::REQUIRED, 'Controller port')
             ->setDescription('Status of all processes');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $handler = new Client();
+        $handler = new Client($input->getArgument('port'));
         $handler->getStatus(function ($status) {
             echo json_encode($status).PHP_EOL;
         });
