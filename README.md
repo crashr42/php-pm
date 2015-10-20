@@ -79,10 +79,10 @@ frontend APPLI1
 backend APPLI1
     balance roundrobin
     mode http
-    server server1 localhost:5502 maxconn 10
-    server server1 localhost:5503 maxconn 10
-    server server1 localhost:5504 maxconn 10
-    server server1 localhost:5505 maxconn 10
+    server server1 localhost:5502 maxconn 10 check
+    server server1 localhost:5503 maxconn 10 check
+    server server1 localhost:5504 maxconn 10 check
+    server server1 localhost:5505 maxconn 10 check
 ```
 
 ### Setup 2. Use internal Load-Balancer
