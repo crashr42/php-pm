@@ -67,6 +67,24 @@ server {
 }
 ```
 
+Example config for HAProxy:
+
+```haproxy
+frontend APPLI1
+    bind 0.0.0.0:8080
+    mode http
+    option http-server-close
+    default_backend APPLI1
+ 
+backend APPLI1
+    balance roundrobin
+    mode http
+    server server1 localhost:5502 maxconn 10
+    server server1 localhost:5503 maxconn 10
+    server server1 localhost:5504 maxconn 10
+    server server1 localhost:5505 maxconn 10
+```
+
 ### Setup 2. Use internal Load-Balancer
 
 This setup is slower as we can't load balance incoming connections as fast as NGiNX it does,
