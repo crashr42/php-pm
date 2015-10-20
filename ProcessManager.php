@@ -258,9 +258,9 @@ class ProcessManager
 
     private function status()
     {
-        return ['slaves' => array_map(function ($slave) {
+        return ['slaves' => array_values(array_map(function ($slave) {
             return array_diff_key($slave, ['connection' => null]);
-        }, $this->slaves)];
+        }, $this->slaves))];
     }
 
     protected function commandRestart(array $data, Connection $conn)
