@@ -20,7 +20,7 @@ class StatusCommand extends Command
 
         $this
             ->setName('status')
-            ->addArgument('port', InputArgument::REQUIRED, 'Controller port')
+            ->addArgument('port', InputArgument::REQUIRED, 'Controller port.')
             ->setDescription('Status of all processes');
     }
 
