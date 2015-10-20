@@ -50,12 +50,18 @@ class StartCommand extends Command
             chdir($workingDir);
         }
 
-        $bridge        = $input->getOption('bridge');
-        $host          = $input->getOption('host');
-        $port          = (int) $input->getOption('port');
-        $workers       = (int) $input->getOption('workers');
-        $appenv        = $input->getOption('app-env');
-        $appBootstrap  = $input->getOption('bootstrap');
+        $config = [];
+        if (file_exists($file = realpath($workingDir.'/ppm.json'))) {
+            echo sprintf("Use config file %s\n", $file);
+            $config = json_decode(file_get_contents($file), true);
+        }
+
+        $bridge        = $this->defaultOrConfig($config, 'bridge', $input->getOption('bridge'));
+        $host          = $this->defaultOrConfig($config, 'host', $input->getOption('host'));
+        $port          = (int) $this->defaultOrConfig($config, 'port', $input->getOption('port'));
+        $workers       = (int) $this->defaultOrConfig($config, 'workers', $input->getOption('workers'));
+        $appenv        = $this->defaultOrConfig($config, 'app-env', $input->getOption('app-env'));
+        $appBootstrap  = $this->defaultOrConfig($config, 'bootstrap', $input->getOption('bootstrap'));
 
         $handler = new ProcessManager($port, $host, $workers);
 
