@@ -2,6 +2,9 @@
 
 namespace PHPPM;
 
+use Monolog\Handler\ErrorLogHandler;
+use Monolog\Handler\StreamHandler;
+use Monolog\Logger;
 use React\EventLoop\Factory;
 use React\Http\Request;
 use React\Http\Response;
@@ -80,11 +83,27 @@ class ProcessManager
      */
     protected $port = 8080;
 
-    public function __construct($port = 8080, $host = '127.0.0.1', $slaveCount = 8)
+    /**
+     * @var
+     */
+    protected $logger;
+
+    /**
+     * @var string
+     */
+    protected $logFile;
+
+    public function __construct($port = 8080, $host = '127.0.0.1', $slaveCount = 8, $logFile)
     {
         $this->slaveCount = $slaveCount;
         $this->host = $host;
         $this->port = $port;
+
+        $this->logFile = $logFile;
+
+        $this->logger = new Logger(static::class);
+        $this->logger->pushHandler(new StreamHandler($logFile));
+        $this->logger->pushHandler(new ErrorLogHandler());
     }
 
     public function fork()
@@ -282,11 +301,14 @@ class ProcessManager
 
         /** @var Connection $connection */
         $connection = $slave['connection'];
-        $connection->on('close', \Closure::bind(function () use ($slaves, $connection, $client) {
+        $connection->on('close', \Closure::bind(function () use ($slave, $slaves, $connection, $client) {
+            $message = sprintf('Restarted http://%s:%s', $slave['host'], $slave['port']);
+            $this->logger->info($message);
+            $client->write($message);
             if (count($slaves) > 0) {
                 $this->gracefulRestart(array_pop($slaves), $slaves, $client);
             } else {
-                $client->end();
+                $client->end('Cluster fully restarted.');
             }
         }, $this));
         $connection->write(json_encode(['cmd' => 'restart']));
@@ -307,7 +329,7 @@ class ProcessManager
                 $slave['born_at'] = $data['born_at'];
                 $slave['ping_at'] = $data['ping_at'];
                 if ($data['memory'] > static::WORKER_MEMORY_LIMIT) {
-                    echo sprintf("Worker memory limit %s exceeded.\n", static::WORKER_MEMORY_LIMIT);
+                    $this->logger->warning(sprintf("Worker memory limit %s exceeded.\n", static::WORKER_MEMORY_LIMIT));
                     $slave['connection']->write(json_encode(['cmd' => 'restart']));
                 }
                 break;
@@ -346,7 +368,7 @@ class ProcessManager
             }
         }
         if (!$exists) {
-            echo sprintf("New slave %s up and ready.\n", $newSlave['port']);
+            $this->logger->info(sprintf("New slave %s up and ready.\n", $newSlave['port']));
             $this->slaves[] = $newSlave;
         }
     }
@@ -354,7 +376,7 @@ class ProcessManager
     protected function commandUnregister(array $data)
     {
         $pid = (int)$data['pid'];
-        echo sprintf("Slave died. (pid %d)\n", $pid);
+        $this->logger->warning(sprintf("Slave died. (pid %d)\n", $pid));
         foreach ($this->slaves as $idx => $slave) {
             if ($slave['pid'] === $pid) {
                 $this->removeSlave($idx);
@@ -367,7 +389,7 @@ class ProcessManager
     protected function removeSlave($idx)
     {
         $slave = $this->slaves[$idx];
-        echo sprintf("Die slave %s on port %s\n", $slave['pid'], $slave['port']);
+        $this->logger->warning(sprintf("Die slave %s on port %s\n", $slave['pid'], $slave['port']));
         $slave['connection']->close();
         unset($this->slaves[$idx]);
     }
@@ -407,7 +429,16 @@ class ProcessManager
     {
         $pid = pcntl_fork();
         if (!$pid) {
-            new ProcessSlave($this->host, $this->port, $this->getBridge(), $this->appBootstrap, $this->appenv);
+            try {
+                new ProcessSlave($this->host, $this->port, $this->getBridge(), $this->appBootstrap, $this->appenv, $this->logFile);
+            } catch (\Exception $e) {
+                foreach ($this->slaves as $idx => $slave) {
+                    if ($slave['pid'] === getmypid()) {
+                        $this->removeSlave($idx);
+                    }
+                }
+                $this->logger->error($e->getMessage(), $e->getTrace());
+            }
             exit;
         }
     }

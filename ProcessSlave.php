@@ -2,6 +2,9 @@
 
 namespace PHPPM;
 
+use Monolog\Handler\ErrorLogHandler;
+use Monolog\Handler\StreamHandler;
+use Monolog\Logger;
 use React\EventLoop\Factory;
 use React\Http\Request;
 use React\Http\Response;
@@ -13,6 +16,7 @@ class ProcessSlave
 {
     const PING_TIMEOUT = 5;
     const RESTARTING_TIMEOUT = 1;
+    const FAIL_CHECK_BEFORE_RESTART = 3;
 
     /**
      * @var \React\EventLoop\LibEventLoop|\React\EventLoop\StreamSelectLoop
@@ -55,6 +59,11 @@ class ProcessSlave
     protected $processing = false;
 
     /**
+     * @var bool
+     */
+    protected $failChecked = 0;
+
+    /**
      * @var string
      */
     private $ppmHost;
@@ -69,11 +78,21 @@ class ProcessSlave
      */
     private $port;
 
-    public function __construct($ppmHost, $ppmPort, $bridgeName = null, $appBootstrap, $appenv)
+    /**
+     * @var Logger
+     */
+    private $logger;
+
+    public function __construct($ppmHost, $ppmPort, $bridgeName = null, $appBootstrap, $appenv, $ppmLogFile)
     {
         $this->ppmHost = $ppmHost;
         $this->ppmPort = $ppmPort;
         $this->bridgeName = $bridgeName;
+
+        $this->logger = new Logger(static::class);
+        $this->logger->pushHandler(new StreamHandler($ppmLogFile));
+        $this->logger->pushHandler(new ErrorLogHandler());
+
         $this->bootstrap($appBootstrap, $appenv);
         $this->connectToMaster();
         $this->loop->run();
@@ -81,7 +100,7 @@ class ProcessSlave
 
     protected function shutdown()
     {
-        echo sprintf("Shutting slave process down (http://%s:%s)\n", $this->ppmHost, $this->port);
+        $this->logger->info(sprintf("Shutting slave process down (http://%s:%s)\n", $this->ppmHost, $this->port));
         $this->bye();
         exit;
     }
@@ -134,8 +153,8 @@ class ProcessSlave
         }, $this));
         /** @noinspection PhpParamsInspection */
         $this->loop->addPeriodicTimer(self::RESTARTING_TIMEOUT, \Closure::bind(function () {
-            if ($this->restarting && !$this->processing) {
-                echo sprintf("Shutdown %s\n", getmypid());
+            if ($this->restarting && !$this->processing && $this->failChecked >= self::FAIL_CHECK_BEFORE_RESTART) {
+                $this->logger->info(sprintf("Shutdown %s\n", getmypid()));
                 $this->shutdown();
             }
         }, $this));
@@ -161,7 +180,7 @@ class ProcessSlave
             try {
                 $socket->listen($port, $this->ppmHost);
                 $this->port = $port;
-                echo sprintf("Listen worker on uri http://%s:%s\n", $this->ppmHost, $port);
+                $this->logger->info(sprintf("Listen worker on uri http://%s:%s\n", $this->ppmHost, $port));
                 break;
             } catch (ConnectionException $e) {
                 $port++;
@@ -173,6 +192,15 @@ class ProcessSlave
 
     public function onRequest(Request $request, Response $response)
     {
+        if ($request->getPath() === '/check') {
+            $response->writeHead($this->restarting ? 500 : 200);
+            if ($this->restarting) {
+                $this->failChecked++;
+            }
+
+            return;
+        }
+
         $this->processing = true;
         if ($bridge = $this->getBridge()) {
             $bridge->onRequest($request, $response);

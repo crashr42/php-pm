@@ -33,7 +33,8 @@ class StartCommand extends Command
 
         $this
             ->setName('start')
-            ->addArgument('working-directory', InputArgument::OPTIONAL, 'The root of your appplication.', './')
+            ->addArgument('working-directory', InputArgument::REQUIRED, 'The root of your appplication.')
+            ->addOption('log-file', null, InputOption::VALUE_OPTIONAL, 'Log file.', './react.log')
             ->addOption('bridge', null, InputOption::VALUE_OPTIONAL, 'The bridge we use to convert a ReactPHP-Request to your target framework.', $bridge)
             ->addOption('host', null, InputOption::VALUE_OPTIONAL, 'Load-Balancer host. Default is 127.0.0.1', $host)
             ->addOption('port', null, InputOption::VALUE_OPTIONAL, 'Load-Balancer port. Default is 8080', $port)
@@ -62,8 +63,9 @@ class StartCommand extends Command
         $workers       = (int) $this->defaultOrConfig($config, 'workers', $input->getOption('workers'));
         $appenv        = $this->defaultOrConfig($config, 'app-env', $input->getOption('app-env'));
         $appBootstrap  = $this->defaultOrConfig($config, 'bootstrap', $input->getOption('bootstrap'));
+        $logFile       = $this->defaultOrConfig($config, 'log-file', $input->getOption('log-file'));
 
-        $handler = new ProcessManager($port, $host, $workers);
+        $handler = new ProcessManager($port, $host, $workers, $logFile);
 
         $handler->setBridge($bridge);
         $handler->setAppEnv($appenv);

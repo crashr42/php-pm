@@ -34,7 +34,7 @@ class RestartCommand extends Command
     {
         $handler = new Client($input->getArgument('port'));
         $handler->restart(function ($status) {
-            echo json_encode($status).PHP_EOL;
+            echo $status.PHP_EOL;
         });
     }
 }
