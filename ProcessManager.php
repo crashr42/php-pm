@@ -11,6 +11,8 @@ use React\Stream\Stream;
 
 class ProcessManager
 {
+    const WORKER_MEMORY_LIMIT = 50 * 1024 * 1024;
+
     /**
      * @var array
      */
@@ -299,11 +301,15 @@ class ProcessManager
 
     protected function commandPing(array $data, Connection $conn)
     {
-        foreach ($this->slaves as &$slave) {
+        foreach ($this->slaves as $idx => &$slave) {
             if ($slave['pid'] === $data['pid']) {
                 $slave['memory'] = $data['memory'];
                 $slave['born_at'] = $data['born_at'];
                 $slave['ping_at'] = $data['ping_at'];
+                if ($data['memory'] > static::WORKER_MEMORY_LIMIT) {
+                    echo sprintf("Worker memory limit %s exceeded.\n", static::WORKER_MEMORY_LIMIT);
+                    $slave['connection']->write(json_encode(['cmd' => 'restart']));
+                }
                 break;
             }
         }
