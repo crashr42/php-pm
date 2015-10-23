@@ -93,6 +93,15 @@ class ProcessManager
      */
     protected $logFile;
 
+    /**
+     * Create process manager.
+     * @param int $port
+     * @param string $host
+     * @param int $slaveCount
+     * @param string $logFile
+     * @throws \Exception
+     * @throws \InvalidArgumentException
+     */
     public function __construct($port = 8080, $host = '127.0.0.1', $slaveCount = 8, $logFile)
     {
         $this->slaveCount = $slaveCount;
@@ -345,7 +354,6 @@ class ProcessManager
 
     protected function commandRegister(array $data, Connection $conn)
     {
-        // TODO: костыль, slave процессов создается больше чем нужно в checkSlaves
         if (count($this->slaves) === $this->slaveCount) {
             $conn->end();
 

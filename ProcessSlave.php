@@ -83,6 +83,17 @@ class ProcessSlave
      */
     private $logger;
 
+    /**
+     * Create slave process.
+     * @param string $ppmHost
+     * @param int $ppmPort
+     * @param null|string $bridgeName
+     * @param string $appBootstrap
+     * @param string $appenv
+     * @param string $ppmLogFile
+     * @throws \Exception
+     * @throws \InvalidArgumentException
+     */
     public function __construct($ppmHost, $ppmPort, $bridgeName = null, $appBootstrap, $appenv, $ppmLogFile)
     {
         $this->ppmHost = $ppmHost;
