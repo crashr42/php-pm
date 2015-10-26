@@ -20,6 +20,7 @@ Options:
  --bridge              The bridge we use to convert a ReactPHP-Request to your target framework.
  --port                Load-Balancer port. Default is 8080
  --workers             Worker count. Default is 8. Should be minimum equal to the number of CPU cores.
+ --worker-memory-limit Memory limit in MB per worker process.
  --app-env             The that your application will use to bootstrap.
  --bootstrap           The class that will be used to bootstrap your application.
  --help (-h)           Display this help message.
@@ -37,7 +38,11 @@ Options:
 $ ./bin/ppm start ~/my/path/to/symfony/ --bridge=httpKernel
 ```
 
-Each worker starts its own HTTP Server which listens on port 5501, 5502, 5503 etc. Range is `5501 -> 5500+<workersCount>`.
+Port 5500 used by master process. Root url showing cluster status.
+
+Port 5501 used by internal balancer.
+
+Each worker starts its own HTTP Server which listens on port 5502, 5503, 5504 etc. Range is `5501 -> 5500+<workersCount>`.
 
 ### Setup 1. Use external Load-Balancer
 
