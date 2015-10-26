@@ -84,6 +84,7 @@ frontend APPLI1
 backend APPLI1
     balance roundrobin
     mode http
+    option httpchk HEAD /check
     server server1 localhost:5502 maxconn 10 check
     server server1 localhost:5503 maxconn 10 check
     server server1 localhost:5504 maxconn 10 check
@@ -96,3 +97,21 @@ This setup is slower as we can't load balance incoming connections as fast as NG
 but it's perfect for testing purposes.
 
 ![ReactPHP with internal Load-Balancer](doc/reactphp-internal-balancer.jpg)
+
+### Restarting
+
+```bash
+$ ./bin/ppm restart 5500
+```
+
+Graceful restart all child processes and reload code with zero downtime.
+
+Restarting working only with haproxy as load balancer.
+
+### Status
+
+```bash
+$ ./bin/ppm status 5500
+```
+
+Show cluster status.
