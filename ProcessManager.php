@@ -14,7 +14,7 @@ use React\Stream\Stream;
 
 class ProcessManager
 {
-    const WORKER_MEMORY_LIMIT = 50 * 1024 * 1024;
+    const WORKER_MEMORY_LIMIT = 30 * 1024 * 1024;
 
     /**
      * @var array
