@@ -2,6 +2,7 @@
 
 namespace PHPPM;
 
+use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\ErrorLogHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
@@ -14,8 +15,6 @@ use React\Stream\Stream;
 
 class ProcessManager
 {
-    const WORKER_MEMORY_LIMIT = 30 * 1024 * 1024;
-
     /**
      * @var array
      */
@@ -94,25 +93,38 @@ class ProcessManager
     protected $logFile;
 
     /**
-     * Create process manager.
-     * @param int $port
-     * @param string $host
-     * @param int $slaveCount
-     * @param string $logFile
-     * @throws \Exception
-     * @throws \InvalidArgumentException
+     * @var int
      */
-    public function __construct($port = 8080, $host = '127.0.0.1', $slaveCount = 8, $logFile)
+    protected $workerMemoryLimit;
+
+    /**
+     * Create process manager.
+     *
+     * @param int    $port
+     * @param string $host
+     * @param int    $slaveCount
+     * @param        $workerMemoryLimit
+     * @param string $logFile
+     *
+     * @throws \Exception
+     */
+    public function __construct($port = 8080, $host = '127.0.0.1', $slaveCount = 8, $workerMemoryLimit, $logFile)
     {
         $this->slaveCount = $slaveCount;
         $this->host = $host;
         $this->port = $port;
+        $this->workerMemoryLimit = $workerMemoryLimit * 1024 * 1024;
+
+        $lineFormatter = new LineFormatter('[%datetime%] %channel%.%level_name%: %message% %context% %extra%', null, false, true);
 
         $this->logFile = $logFile;
-
         $this->logger = new Logger(static::class);
-        $this->logger->pushHandler(new StreamHandler($logFile));
-        $this->logger->pushHandler(new ErrorLogHandler());
+        $this->logger->pushHandler((new StreamHandler($logFile))->setFormatter($lineFormatter));
+        $this->logger->pushHandler((new ErrorLogHandler())->setFormatter($lineFormatter));
+
+        $this->logger->debug(sprintf('Workers: %s', $slaveCount));
+        $this->logger->debug(sprintf('Worker memory limit: %s bytes', $this->workerMemoryLimit));
+        $this->logger->debug(sprintf('Host: %s:%s', $host, $port));
     }
 
     public function fork()
@@ -199,8 +211,6 @@ class ProcessManager
     }
 
     /**
-     * TODO: Балансировка на чем-то спотыкается при большом кол-ве запросов.
-     *
      * @param Connection $incoming
      */
     public function onWeb(Connection $incoming)
@@ -264,8 +274,6 @@ class ProcessManager
             foreach ($this->slaves as $idx => $slave) {
                 if ($slave['connection'] === $conn) {
                     $this->removeSlave($idx);
-                    $this->checkSlaves();
-                    pcntl_waitpid($slave['pid'], $pidStatus, WNOHANG);
                 }
             }
         }, $this));
@@ -288,9 +296,14 @@ class ProcessManager
 
     private function status()
     {
-        return ['slaves' => array_values(array_map(function ($slave) {
+        $data['pid'] = getmypid();
+        $data['host'] = $this->host;
+        $data['port'] = $this->port;
+        $data['slaves'] = array_values(array_map(function ($slave) {
             return array_diff_key($slave, ['connection' => null]);
-        }, $this->slaves))];
+        }, $this->slaves));
+
+        return $data;
     }
 
     protected function commandRestart(array $data, Connection $conn)
@@ -304,7 +317,7 @@ class ProcessManager
     {
         foreach ($this->slaves as $idx => $origSlave) {
             if ($slave === $origSlave) {
-                $this->slaves[$idx]['die'] = true;
+                $this->slaves[$idx]['restarting'] = true;
             }
         }
 
@@ -337,8 +350,8 @@ class ProcessManager
                 $slave['memory'] = $data['memory'];
                 $slave['born_at'] = $data['born_at'];
                 $slave['ping_at'] = $data['ping_at'];
-                if ($data['memory'] > static::WORKER_MEMORY_LIMIT && !$this->hasRestartingWorkers()) {
-                    $this->logger->warning(sprintf("Worker memory limit %s exceeded.\n", static::WORKER_MEMORY_LIMIT));
+                if ($data['memory'] > $this->workerMemoryLimit && !$this->hasRestartingWorkers()) {
+                    $this->logger->warning(sprintf("Worker memory limit %s exceeded.\n", $this->workerMemoryLimit));
                     $slave['restarting'] = true;
                     $slave['connection']->write(json_encode(['cmd' => 'restart']));
                 }
@@ -356,6 +369,7 @@ class ProcessManager
                 break;
             }
         }
+
         return $hasRestarting;
     }
 
@@ -401,7 +415,6 @@ class ProcessManager
         foreach ($this->slaves as $idx => $slave) {
             if ($slave['pid'] === $pid) {
                 $this->removeSlave($idx);
-                $this->checkSlaves();
             }
         }
         $this->checkSlaves();
@@ -413,6 +426,15 @@ class ProcessManager
         $this->logger->warning(sprintf("Die slave %s on port %s\n", $slave['pid'], $slave['port']));
         $slave['connection']->close();
         unset($this->slaves[$idx]);
+
+        /** @noinspection PhpParamsInspection */
+        $this->loop->addTimer(2, \Closure::bind(function () {
+            while (($pid = pcntl_waitpid(-1, $pidStatus, WNOHANG)) > 0) {
+                $this->logger->debug(sprintf('Success wait child pid %s.', $pid));
+            }
+        }, $this));
+
+        $this->checkSlaves();
     }
 
     /**
@@ -437,7 +459,7 @@ class ProcessManager
     protected function activeSlaves()
     {
         return array_filter($this->slaves, function ($slave) {
-            return !array_key_exists('die', $slave);
+            return !array_key_exists('restarting', $slave);
         });
     }
 

@@ -2,6 +2,7 @@
 
 namespace PHPPM;
 
+use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\ErrorLogHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
@@ -100,9 +101,11 @@ class ProcessSlave
         $this->ppmPort = $ppmPort;
         $this->bridgeName = $bridgeName;
 
+        $lineFormatter = new LineFormatter('[%datetime%] %channel%.%level_name%: %message% %context% %extra%', null, false, true);
+
         $this->logger = new Logger(static::class);
-        $this->logger->pushHandler(new StreamHandler($ppmLogFile));
-        $this->logger->pushHandler(new ErrorLogHandler());
+        $this->logger->pushHandler((new StreamHandler($ppmLogFile))->setFormatter($lineFormatter));
+        $this->logger->pushHandler((new ErrorLogHandler())->setFormatter($lineFormatter));
 
         $this->bootstrap($appBootstrap, $appenv);
         $this->connectToMaster();

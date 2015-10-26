@@ -41,6 +41,7 @@ class StartCommand extends Command
             ->addOption('workers', null, InputOption::VALUE_OPTIONAL, 'Worker count. Default is 8. Should be minimum equal to the number of CPU cores.', $workers)
             ->addOption('app-env', null, InputOption::VALUE_OPTIONAL, 'The environment that your application will use to bootstrap (if any)', $appenv)
             ->addOption('bootstrap', null, InputOption::VALUE_OPTIONAL, 'The class that will be used to bootstrap your application', $appBootstrap)
+            ->addOption('worker-memory-limit', null, InputOption::VALUE_OPTIONAL, 'Memory limit per worker.', 25)
             ->setDescription('Starts the server')
         ;
     }
@@ -57,15 +58,16 @@ class StartCommand extends Command
             $config = json_decode(file_get_contents($file), true);
         }
 
-        $bridge        = $this->defaultOrConfig($config, 'bridge', $input->getOption('bridge'));
-        $host          = $this->defaultOrConfig($config, 'host', $input->getOption('host'));
-        $port          = (int) $this->defaultOrConfig($config, 'port', $input->getOption('port'));
-        $workers       = (int) $this->defaultOrConfig($config, 'workers', $input->getOption('workers'));
-        $appenv        = $this->defaultOrConfig($config, 'app-env', $input->getOption('app-env'));
-        $appBootstrap  = $this->defaultOrConfig($config, 'bootstrap', $input->getOption('bootstrap'));
-        $logFile       = $this->defaultOrConfig($config, 'log-file', $input->getOption('log-file'));
+        $bridge            = $this->defaultOrConfig($config, 'bridge', $input->getOption('bridge'));
+        $host              = $this->defaultOrConfig($config, 'host', $input->getOption('host'));
+        $port              = (int) $this->defaultOrConfig($config, 'port', $input->getOption('port'));
+        $workers           = (int) $this->defaultOrConfig($config, 'workers', $input->getOption('workers'));
+        $appenv            = $this->defaultOrConfig($config, 'app-env', $input->getOption('app-env'));
+        $appBootstrap      = $this->defaultOrConfig($config, 'bootstrap', $input->getOption('bootstrap'));
+        $logFile           = $this->defaultOrConfig($config, 'log-file', $input->getOption('log-file'));
+        $workerMemoryLimit = $this->defaultOrConfig($config, 'worker-memory-limit', $input->getOption('worker-memory-limit'));
 
-        $handler = new ProcessManager($port, $host, $workers, $logFile);
+        $handler = new ProcessManager($port, $host, $workers, $workerMemoryLimit, $logFile);
 
         $handler->setBridge($bridge);
         $handler->setAppEnv($appenv);
