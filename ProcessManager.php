@@ -337,13 +337,26 @@ class ProcessManager
                 $slave['memory'] = $data['memory'];
                 $slave['born_at'] = $data['born_at'];
                 $slave['ping_at'] = $data['ping_at'];
-                if ($data['memory'] > static::WORKER_MEMORY_LIMIT) {
+                if ($data['memory'] > static::WORKER_MEMORY_LIMIT && !$this->hasRestartingWorkers()) {
                     $this->logger->warning(sprintf("Worker memory limit %s exceeded.\n", static::WORKER_MEMORY_LIMIT));
+                    $slave['restarting'] = true;
                     $slave['connection']->write(json_encode(['cmd' => 'restart']));
                 }
                 break;
             }
         }
+    }
+
+    private function hasRestartingWorkers()
+    {
+        $hasRestarting = false;
+        foreach ($this->slaves as $slave) {
+            if (array_key_exists('restarting', $slave) && $slave['restarting']) {
+                $hasRestarting = true;
+                break;
+            }
+        }
+        return $hasRestarting;
     }
 
     protected function commandStop(array $data, Connection $conn)
