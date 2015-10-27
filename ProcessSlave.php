@@ -16,7 +16,7 @@ use React\Socket\Server;
 class ProcessSlave
 {
     const PING_TIMEOUT = 5;
-    const RESTARTING_TIMEOUT = 1;
+    const SHUTDOWN_TIMEOUT = 1;
     const FAIL_CHECK_BEFORE_RESTART = 3;
 
     /**
@@ -52,7 +52,7 @@ class ProcessSlave
     /**
      * @var bool
      */
-    protected $restarting = false;
+    protected $shutdown = false;
 
     /**
      * @var bool
@@ -166,8 +166,8 @@ class ProcessSlave
             }
         }, $this));
         /** @noinspection PhpParamsInspection */
-        $this->loop->addPeriodicTimer(self::RESTARTING_TIMEOUT, \Closure::bind(function () {
-            if ($this->restarting) {
+        $this->loop->addPeriodicTimer(self::SHUTDOWN_TIMEOUT, \Closure::bind(function () {
+            if ($this->shutdown) {
                 $allowRestart = !$this->processing && $this->failChecked >= self::FAIL_CHECK_BEFORE_RESTART;
                 if ($allowRestart) {
                     $this->logger->info(sprintf("Shutdown %s\n", getmypid()));
@@ -180,8 +180,8 @@ class ProcessSlave
 
         $this->connection->on('data', \Closure::bind(function ($data) {
             $data = json_decode($data, true);
-            if ($data['cmd'] === 'restart') {
-                $this->restarting = true;
+            if ($data['cmd'] === 'shutdown') {
+                $this->shutdown = true;
             }
         }, $this));
 
@@ -212,8 +212,8 @@ class ProcessSlave
     public function onRequest(Request $request, Response $response)
     {
         if ($request->getPath() === '/check') {
-            $response->writeHead($this->restarting ? 500 : 200);
-            if ($this->restarting) {
+            $response->writeHead($this->shutdown ? 500 : 200);
+            if ($this->shutdown) {
                 $this->failChecked++;
             }
 

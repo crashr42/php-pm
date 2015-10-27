@@ -98,6 +98,16 @@ class ProcessManager
     protected $workerMemoryLimit;
 
     /**
+     * @var bool
+     */
+    protected $shutdownLock = false;
+
+    /**
+     * @var bool
+     */
+    protected $allowNewInstances = true;
+
+    /**
      * Create process manager.
      *
      * @param int    $port
@@ -299,6 +309,9 @@ class ProcessManager
         $data['pid'] = getmypid();
         $data['host'] = $this->host;
         $data['port'] = $this->port;
+        if ($this->shutdownLock) {
+            $data['shutdown'] = true;
+        }
         $data['slaves'] = array_values(array_map(function ($slave) {
             return array_diff_key($slave, ['connection' => null]);
         }, $this->slaves));
@@ -308,34 +321,66 @@ class ProcessManager
 
     protected function commandRestart(array $data, Connection $conn)
     {
+        if ($this->shutdownLock) {
+            $conn->write('Shutdown already in progress.');
+            $conn->end();
+            return;
+        }
+
+        $this->shutdownLock = true;
+
         $slaves = $this->slaves;
 
-        $this->gracefulRestart(array_pop($slaves), $slaves, $conn);
+        $this->gracefulShutdown(array_pop($slaves), $slaves, $conn);
     }
 
-    private function gracefulRestart($slave, $slaves, Connection $client)
+    protected function commandStop(array $data, Connection $conn)
+    {
+        if ($this->shutdownLock) {
+            $conn->write('Shutdown already in progress.');
+            $conn->end();
+            return;
+        }
+
+        $this->allowNewInstances = false;
+        $this->shutdownLock = true;
+
+        $slaves = $this->slaves;
+
+        $this->gracefulShutdown(array_pop($slaves), $slaves, $conn, \Closure::bind(function () {
+            $this->logger->info('Exited.');
+            $this->loop->stop();
+            exit;
+        }, $this));
+    }
+
+    private function gracefulShutdown($slave, $slaves, Connection $client, callable $callback = null)
     {
         foreach ($this->slaves as $idx => $origSlave) {
             if ($slave === $origSlave) {
-                $this->slaves[$idx]['restarting'] = true;
+                $this->slaves[$idx]['shutdown'] = true;
             }
         }
 
         /** @var Connection $connection */
         $connection = $slave['connection'];
-        $connection->on('close', \Closure::bind(function () use ($slave, $slaves, $connection, $client) {
-            $message = sprintf("Restarted http://%s:%s\n", $slave['host'], $slave['port']);
+        $connection->on('close', \Closure::bind(function () use ($slave, $slaves, $connection, $client, $callback) {
+            $message = sprintf("Shutdown http://%s:%s\n", $slave['host'], $slave['port']);
             $this->logger->info($message);
             $client->write($message);
             if (count($slaves) > 0) {
-                $this->gracefulRestart(array_pop($slaves), $slaves, $client);
+                $this->gracefulShutdown(array_pop($slaves), $slaves, $client, $callback);
             } else {
-                $client->write('Cluster fully restarted.');
+                $this->shutdownLock = false;
+                if ($callback !== null) {
+                    $callback();
+                }
+                $client->write('Cluster fully shutdown.');
                 $client->end();
             }
         }, $this));
-        $client->write(sprintf('Try restarting http://%s:%s', $slave['host'], $slave['port']));
-        $connection->write(json_encode(['cmd' => 'restart']));
+        $client->write(sprintf('Try shutdown http://%s:%s', $slave['host'], $slave['port']));
+        $connection->write(json_encode(['cmd' => 'shutdown']));
     }
 
     protected function commandStatus(array $data, Connection $conn)
@@ -352,33 +397,27 @@ class ProcessManager
                 $slave['memory'] = $data['memory'];
                 $slave['born_at'] = $data['born_at'];
                 $slave['ping_at'] = $data['ping_at'];
-                if ($data['memory'] > $this->workerMemoryLimit && !$this->hasRestartingWorkers()) {
+                if ($data['memory'] > $this->workerMemoryLimit && !$this->hasShutdownWorkers()) {
                     $this->logger->warning(sprintf("Worker memory limit %s exceeded.\n", $this->workerMemoryLimit));
-                    $slave['restarting'] = true;
-                    $slave['connection']->write(json_encode(['cmd' => 'restart']));
+                    $slave['shutdown'] = true;
+                    $slave['connection']->write(json_encode(['cmd' => 'shutdown']));
                 }
                 break;
             }
         }
     }
 
-    private function hasRestartingWorkers()
+    private function hasShutdownWorkers()
     {
-        $hasRestarting = false;
+        $hasShutdown = false;
         foreach ($this->slaves as $slave) {
-            if (array_key_exists('restarting', $slave) && $slave['restarting']) {
-                $hasRestarting = true;
+            if (array_key_exists('shutdown', $slave) && $slave['shutdown']) {
+                $hasShutdown = true;
                 break;
             }
         }
 
-        return $hasRestarting;
-    }
-
-    protected function commandStop(array $data, Connection $conn)
-    {
-        $conn->end();
-        exit;
+        return $hasShutdown;
     }
 
     protected function commandRegister(array $data, Connection $conn)
@@ -445,7 +484,7 @@ class ProcessManager
      */
     protected function checkSlaves()
     {
-        if (!$this->run) {
+        if (!$this->run || !$this->allowNewInstances) {
             return;
         }
 
@@ -461,7 +500,7 @@ class ProcessManager
     protected function activeSlaves()
     {
         return array_filter($this->slaves, function ($slave) {
-            return !array_key_exists('restarting', $slave);
+            return !array_key_exists('shutdown', $slave);
         });
     }
 

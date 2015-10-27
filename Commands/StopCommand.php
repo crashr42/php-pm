@@ -34,7 +34,7 @@ class StopCommand extends Command
     {
         $handler = new Client($input->getArgument('port'));
         $handler->stop(function ($status) {
-            echo json_encode($status).PHP_EOL;
+            echo $status.PHP_EOL;
         });
     }
 }
