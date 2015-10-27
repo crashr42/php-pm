@@ -104,7 +104,7 @@ class ProcessSlave
         $lineFormatter = new LineFormatter('[%datetime%] %channel%.%level_name%: %message% %context% %extra%', null, false, true);
 
         $this->logger = new Logger(static::class);
-        $this->logger->pushHandler((new StreamHandler($ppmLogFile))->setFormatter($lineFormatter));
+        $this->logger->pushHandler(new StreamHandler($ppmLogFile));
         $this->logger->pushHandler((new ErrorLogHandler())->setFormatter($lineFormatter));
 
         $this->bootstrap($appBootstrap, $appenv);
@@ -167,9 +167,14 @@ class ProcessSlave
         }, $this));
         /** @noinspection PhpParamsInspection */
         $this->loop->addPeriodicTimer(self::RESTARTING_TIMEOUT, \Closure::bind(function () {
-            if ($this->restarting && !$this->processing && $this->failChecked >= self::FAIL_CHECK_BEFORE_RESTART) {
-                $this->logger->info(sprintf("Shutdown %s\n", getmypid()));
-                $this->shutdown();
+            if ($this->restarting) {
+                $allowRestart = !$this->processing && $this->failChecked >= self::FAIL_CHECK_BEFORE_RESTART;
+                if ($allowRestart) {
+                    $this->logger->info(sprintf("Shutdown %s\n", getmypid()));
+                    $this->shutdown();
+                } else {
+                    $this->logger->info(sprintf("Wait balancer checks and requests complete %s\n", getmypid()));
+                }
             }
         }, $this));
 

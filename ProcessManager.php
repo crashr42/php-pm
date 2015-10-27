@@ -119,7 +119,7 @@ class ProcessManager
 
         $this->logFile = $logFile;
         $this->logger = new Logger(static::class);
-        $this->logger->pushHandler((new StreamHandler($logFile))->setFormatter($lineFormatter));
+        $this->logger->pushHandler(new StreamHandler($logFile));
         $this->logger->pushHandler((new ErrorLogHandler())->setFormatter($lineFormatter));
 
         $this->logger->debug(sprintf('Workers: %s', $slaveCount));
@@ -324,15 +324,17 @@ class ProcessManager
         /** @var Connection $connection */
         $connection = $slave['connection'];
         $connection->on('close', \Closure::bind(function () use ($slave, $slaves, $connection, $client) {
-            $message = sprintf('Restarted http://%s:%s', $slave['host'], $slave['port']);
+            $message = sprintf("Restarted http://%s:%s\n", $slave['host'], $slave['port']);
             $this->logger->info($message);
             $client->write($message);
             if (count($slaves) > 0) {
                 $this->gracefulRestart(array_pop($slaves), $slaves, $client);
             } else {
-                $client->end('Cluster fully restarted.');
+                $client->write('Cluster fully restarted.');
+                $client->end();
             }
         }, $this));
+        $client->write(sprintf('Try restarting http://%s:%s', $slave['host'], $slave['port']));
         $connection->write(json_encode(['cmd' => 'restart']));
     }
 
