@@ -75,20 +75,27 @@ server {
 Example config for HAProxy:
 
 ```haproxy
-frontend APPLI1
-    bind 0.0.0.0:8080
+frontend react
+    bind 0.0.0.0:80
     mode http
     option http-server-close
-    default_backend APPLI1
- 
-backend APPLI1
+    acl upload path_reg .*upload.*
+    use_backend httpd if upload
+    default_backend react
+
+backend httpd
+    mode http
+    server app01 localhost:8000
+
+backend react
     balance roundrobin
     mode http
+    stats enable
+    stats uri /stats
     option httpchk HEAD /check
-    server server1 localhost:5502 maxconn 10 check
-    server server1 localhost:5503 maxconn 10 check
-    server server1 localhost:5504 maxconn 10 check
-    server server1 localhost:5505 maxconn 10 check
+    server app01 localhost:5502 maxconn 1 check
+    server app02 localhost:5503 maxconn 1 check
+    server app03 localhost:5504 maxconn 1 check
 ```
 
 ### Setup 2. Use internal Load-Balancer
