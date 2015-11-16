@@ -108,6 +108,11 @@ class ProcessManager
     protected $allowNewInstances = true;
 
     /**
+     * @var
+     */
+    private $workingDirectory;
+
+    /**
      * Create process manager.
      *
      * @param int    $port
@@ -319,6 +324,11 @@ class ProcessManager
         return $data;
     }
 
+    public function setWorkingDirectory($workingDir)
+    {
+        $this->workingDirectory = $workingDir;
+    }
+
     protected function commandRestart(array $data, Connection $conn)
     {
         if ($this->shutdownLock) {
@@ -514,6 +524,7 @@ class ProcessManager
         $pid = pcntl_fork();
         if (!$pid) {
             try {
+                chdir($this->workingDirectory);
                 new ProcessSlave($this->host, $this->port, $this->getBridge(), $this->appBootstrap, $this->appenv, $this->logFile);
             } catch (\Exception $e) {
                 foreach ($this->slaves as $idx => $slave) {

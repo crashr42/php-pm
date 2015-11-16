@@ -72,6 +72,7 @@ class StartCommand extends Command
         $handler->setBridge($bridge);
         $handler->setAppEnv($appenv);
         $handler->setAppBootstrap($appBootstrap);
+        $handler->setWorkingDirectory($workingDir);
 
         $handler->run();
     }
