@@ -18,6 +18,7 @@ class ProcessSlave
     const PING_TIMEOUT = 5;
     const SHUTDOWN_TIMEOUT = 1;
     const FAIL_CHECK_BEFORE_RESTART = 3;
+    const MAX_WORKERS = 200;
 
     /**
      * @var \React\EventLoop\LibEventLoop|\React\EventLoop\StreamSelectLoop
@@ -65,6 +66,11 @@ class ProcessSlave
     protected $failChecked = 0;
 
     /**
+     * @var int
+     */
+    protected $waitFailChecked = 0;
+
+    /**
      * @var string
      */
     private $ppmHost;
@@ -86,19 +92,21 @@ class ProcessSlave
 
     /**
      * Create slave process.
-     * @param string $ppmHost
-     * @param int $ppmPort
+     *
+     * @param string      $ppmHost
+     * @param int         $ppmPort
      * @param null|string $bridgeName
-     * @param string $appBootstrap
-     * @param string $appenv
-     * @param string $ppmLogFile
+     * @param string      $appBootstrap
+     * @param string      $appenv
+     * @param string      $ppmLogFile
+     *
      * @throws \Exception
      * @throws \InvalidArgumentException
      */
     public function __construct($ppmHost, $ppmPort, $bridgeName = null, $appBootstrap, $appenv, $ppmLogFile)
     {
-        $this->ppmHost = $ppmHost;
-        $this->ppmPort = $ppmPort;
+        $this->ppmHost    = $ppmHost;
+        $this->ppmPort    = $ppmPort;
         $this->bridgeName = $bridgeName;
 
         $lineFormatter = new LineFormatter('[%datetime%] %channel%.%level_name%: %message% %context% %extra%', null, false, true);
@@ -148,8 +156,8 @@ class ProcessSlave
     {
         $bornAt = date('Y-m-d H:i:s O');
 
-        $this->loop = Factory::create();
-        $this->client = stream_socket_client(sprintf('tcp://%s:%s', $this->ppmHost, $this->ppmPort));
+        $this->loop       = Factory::create();
+        $this->client     = stream_socket_client(sprintf('tcp://%s:%s', $this->ppmHost, $this->ppmPort));
         $this->connection = new Connection($this->client, $this->loop);
 
         /** @noinspection PhpParamsInspection */
@@ -168,13 +176,20 @@ class ProcessSlave
         /** @noinspection PhpParamsInspection */
         $this->loop->addPeriodicTimer(self::SHUTDOWN_TIMEOUT, \Closure::bind(function () {
             if ($this->shutdown) {
-                $allowRestart = !$this->processing && $this->failChecked >= self::FAIL_CHECK_BEFORE_RESTART;
+                $failChecked = $this->failChecked >= self::FAIL_CHECK_BEFORE_RESTART;
+                $waitChecked = $this->waitFailChecked > self::SHUTDOWN_TIMEOUT * 10;
+                $allowRestart = !$this->processing && ($failChecked || $waitChecked);
                 if ($allowRestart) {
-                    $this->logger->info(sprintf("Shutdown %s\n", getmypid()));
+                    if ($waitChecked) {
+                        $this->logger->warn('Not wait fail checking! Restarting.');
+                    }
+                    $this->logger->info(sprintf("Shutdown pid %s\n", getmypid()));
                     $this->shutdown();
                 } else {
-                    $this->logger->info(sprintf("Wait balancer checks and requests complete %s\n", getmypid()));
+                    $this->logger->info(sprintf("Wait balancer checks and requests complete [pid: %s]\n", getmypid()));
                 }
+
+                $this->waitFailChecked++;
             }
         }, $this));
 
@@ -190,11 +205,11 @@ class ProcessSlave
         }, $this));
 
         $socket = new Server($this->loop);
-        $http = new \React\Http\Server($socket);
+        $http   = new \React\Http\Server($socket);
         $http->on('request', [$this, 'onRequest']);
 
-        $port = $this->ppmPort;
-        $maxPort = $port + 100;
+        $port    = $this->ppmPort;
+        $maxPort = $port + self::MAX_WORKERS;
         while ($port < $maxPort) {
             try {
                 $socket->listen($port, $this->ppmHost);

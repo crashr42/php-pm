@@ -16,7 +16,7 @@ use React\Stream\Stream;
 class ProcessManager
 {
     /**
-     * @var array
+     * @var Slave[]
      */
     protected $slaves = [];
 
@@ -50,7 +50,7 @@ class ProcessManager
      *
      * @var bool
      */
-    protected $run = false;
+    protected $running = false;
 
     /**
      * @var int
@@ -127,17 +127,21 @@ class ProcessManager
     {
         cli_set_process_title('react master');
 
-        $this->slaveCount = $slaveCount;
-        $this->host = $host;
-        $this->port = $port;
+        $this->slaveCount        = $slaveCount;
+        $this->host              = $host;
+        $this->port              = $port;
         $this->workerMemoryLimit = $workerMemoryLimit * 1024 * 1024;
 
         $lineFormatter = new LineFormatter('[%datetime%] %channel%.%level_name%: %message% %context% %extra%', null, false, true);
 
         $this->logFile = $logFile;
-        $this->logger = new Logger(static::class);
+        $this->logger  = new Logger(static::class);
         $this->logger->pushHandler(new StreamHandler($logFile));
         $this->logger->pushHandler((new ErrorLogHandler())->setFormatter($lineFormatter));
+
+        set_error_handler(\Closure::bind(function ($errno, $errstr, $errfile, $errline) {
+            $this->logger->crit(sprintf('Fatal error "[%s] %s" in %s:%s', $errno, $errstr, $errfile, $errline));
+        }, $this));
 
         $this->logger->debug(sprintf('Workers: %s', $slaveCount));
         $this->logger->debug(sprintf('Worker memory limit: %s bytes', $this->workerMemoryLimit));
@@ -146,7 +150,7 @@ class ProcessManager
 
     public function fork()
     {
-        if ($this->run) {
+        if ($this->running) {
             throw new \LogicException('Can not fork when already run.');
         }
 
@@ -205,26 +209,41 @@ class ProcessManager
 
     public function run()
     {
-        $this->loop = Factory::create();
+        $this->loop       = Factory::create();
         $this->controller = new Server($this->loop);
         $this->controller->on('connection', [$this, 'onSlaveConnection']);
         $this->controller->listen($this->port, $this->host);
+
         $http = new \React\Http\Server($this->controller);
+        /** @noinspection PhpUnusedParameterInspection */
         $http->on('request', \Closure::bind(function (Request $request, Response $response) {
             $response->writeHead();
-            $response->end(json_encode($this->status()));
+            $response->end($this->clusterStatusAsJson());
         }, $this));
 
         $this->web = new Server($this->loop);
         $this->web->on('connection', [$this, 'onWeb']);
         $this->web->listen($this->port + 1, $this->host);
 
+        $this->runSlaves();
+
+        /** @noinspection PhpParamsInspection */
+        $this->loop->addPeriodicTimer(1, \Closure::bind(function () {
+            if (count($this->activeSlaves()) === 0) {
+                $this->logger->crit('Slaves count zero! Run slaves!');
+                $this->runSlaves();
+            }
+        }, $this));
+
+        $this->running = true;
+        $this->loop->run();
+    }
+
+    private function runSlaves()
+    {
         for ($i = 0; $i < $this->slaveCount; $i++) {
             $this->newInstance();
         }
-
-        $this->run = true;
-        $this->loop();
     }
 
     /**
@@ -233,12 +252,14 @@ class ProcessManager
     public function onWeb(Connection $incoming)
     {
         do {
-            $slaves = array_values($this->activeSlaves());
+            $slaves  = array_values($this->activeSlaves());
             $slaveId = $this->getNextSlave();
         } while (!array_key_exists($slaveId, $slaves));
 
-        $port = $slaves[$slaveId]['port'];
-        $client = stream_socket_client(sprintf('tcp://%s:%s', $this->host, $port));
+        /** @var Slave $slave */
+        $slave    = $slaves[$slaveId];
+        $port     = $slave->getPort();
+        $client   = stream_socket_client(sprintf('tcp://%s:%s', $this->host, $port));
         $redirect = new Stream($client, $this->loop);
 
         $incoming->on('close', function () use ($redirect) {
@@ -285,20 +306,15 @@ class ProcessManager
     public function onSlaveConnection(Connection $conn)
     {
         $conn->on('data', \Closure::bind(function ($data) use ($conn) {
-            $this->onData($data, $conn);
+            $this->processMessage($data, $conn);
         }, $this));
         $conn->on('close', \Closure::bind(function () use ($conn) {
             foreach ($this->slaves as $idx => $slave) {
-                if ($slave['connection'] === $conn) {
+                if ($slave->getConnection() === $conn) {
                     $this->removeSlave($idx);
                 }
             }
         }, $this));
-    }
-
-    public function onData($data, Connection $conn)
-    {
-        $this->processMessage($data, $conn);
     }
 
     public function processMessage($data, Connection $conn)
@@ -306,24 +322,25 @@ class ProcessManager
         $data = json_decode($data, true);
 
         $method = 'command'.ucfirst($data['cmd']);
-        if (is_callable([$this, $method])) {
+        if (method_exists($this, $method) && is_callable([$this, $method])) {
             $this->$method($data, $conn);
         }
     }
 
-    private function status()
+    private function clusterStatusAsJson()
     {
-        $data['pid'] = getmypid();
+        $data['pid']  = getmypid();
         $data['host'] = $this->host;
         $data['port'] = $this->port;
         if ($this->shutdownLock) {
             $data['shutdown'] = true;
         }
         $data['slaves'] = array_values(array_map(function ($slave) {
-            return array_diff_key($slave, ['connection' => null]);
+            /** @var Slave $slave */
+            return $slave->asJson();
         }, $this->slaves));
 
-        return $data;
+        return json_encode($data, JSON_PRETTY_PRINT);
     }
 
     public function setWorkingDirectory($workingDir)
@@ -336,6 +353,7 @@ class ProcessManager
         if ($this->shutdownLock) {
             $conn->write('Shutdown already in progress.');
             $conn->end();
+
             return;
         }
 
@@ -351,11 +369,12 @@ class ProcessManager
         if ($this->shutdownLock) {
             $conn->write('Shutdown already in progress.');
             $conn->end();
+
             return;
         }
 
         $this->allowNewInstances = false;
-        $this->shutdownLock = true;
+        $this->shutdownLock      = true;
 
         $slaves = $this->slaves;
 
@@ -366,18 +385,25 @@ class ProcessManager
         }, $this));
     }
 
-    private function gracefulShutdown($slave, $slaves, Connection $client, callable $callback = null)
+    /**
+     * Graceful shutdown slaves.
+     *
+     * @param Slave         $slave
+     * @param array         $slaves
+     * @param Connection    $client
+     * @param callable|null $callback
+     */
+    private function gracefulShutdown(Slave $slave, $slaves, Connection $client, callable $callback = null)
     {
         foreach ($this->slaves as $idx => $origSlave) {
             if ($slave === $origSlave) {
-                $this->slaves[$idx]['shutdown'] = true;
+                $this->slaves[$idx]->setStatus(Slave::STATUS_SHUTDOWN);
             }
         }
 
         /** @var Connection $connection */
-        $connection = $slave['connection'];
-        $connection->on('close', \Closure::bind(function () use ($slave, $slaves, $connection, $client, $callback) {
-            $message = sprintf("Shutdown http://%s:%s\n", $slave['host'], $slave['port']);
+        $slave->getConnection()->on('close', \Closure::bind(function () use ($slave, $slaves, $client, $callback) {
+            $message = sprintf("Shutdown http://%s:%s\n", $slave->getHost(), $slave->getPort());
             $this->logger->info($message);
             $client->write($message);
             if (count($slaves) > 0) {
@@ -391,13 +417,13 @@ class ProcessManager
                 $client->end();
             }
         }, $this));
-        $client->write(sprintf('Try shutdown http://%s:%s', $slave['host'], $slave['port']));
-        $connection->write(json_encode(['cmd' => 'shutdown']));
+        $client->write(sprintf('Try shutdown http://%s:%s', $slave->getHost(), $slave->getPort()));
+        $slave->getConnection()->write(json_encode(['cmd' => 'shutdown']));
     }
 
     protected function commandStatus(array $data, Connection $conn)
     {
-        $response = json_encode($this->status());
+        $response = $this->clusterStatusAsJson();
         printf("%s\n", $response);
         $conn->end($response);
     }
@@ -405,14 +431,14 @@ class ProcessManager
     protected function commandPing(array $data, Connection $conn)
     {
         foreach ($this->slaves as $idx => &$slave) {
-            if ($slave['pid'] === $data['pid']) {
-                $slave['memory'] = $data['memory'];
-                $slave['born_at'] = $data['born_at'];
-                $slave['ping_at'] = $data['ping_at'];
+            if ($slave->getPid() === $data['pid']) {
+                $slave->setMemory($data['memory']);
+                $slave->setBornAt($data['born_at']);
+                $slave->setPingAt($data['ping_at']);
                 if ($data['memory'] > $this->workerMemoryLimit && !$this->hasShutdownWorkers()) {
                     $this->logger->warning(sprintf("Worker memory limit %s exceeded.\n", $this->workerMemoryLimit));
-                    $slave['shutdown'] = true;
-                    $slave['connection']->write(json_encode(['cmd' => 'shutdown']));
+                    $slave->setStatus(Slave::STATUS_SHUTDOWN);
+                    $slave->getConnection()->write(json_encode(['cmd' => 'shutdown']));
                 }
                 break;
             }
@@ -423,7 +449,7 @@ class ProcessManager
     {
         $hasShutdown = false;
         foreach ($this->slaves as $slave) {
-            if (array_key_exists('shutdown', $slave) && $slave['shutdown']) {
+            if ($slave->getStatus() === Slave::STATUS_SHUTDOWN) {
                 $hasShutdown = true;
                 break;
             }
@@ -440,23 +466,19 @@ class ProcessManager
             return;
         }
 
-        $pid = (int)$data['pid'];
-        $port = (int)$data['port'];
-        $newSlave = [
-            'pid'        => $pid,
-            'port'       => $port,
-            'host'       => $this->host,
-            'connection' => $conn,
-        ];
-        $exists = false;
-        foreach ($this->slaves as $slave) {
-            if ($slave['port'] === $newSlave['port']) {
-                $exists = true;
-                break;
-            }
-        }
-        if (!$exists) {
-            $this->logger->info(sprintf("New slave %s up and ready.\n", $newSlave['port']));
+        $newSlave = new Slave();
+        $newSlave->setPid($data['pid']);
+        $newSlave->setPort($data['port']);
+        $newSlave->setHost($this->host);
+        $newSlave->setConnection($conn);
+
+        $isNew = count(array_filter($this->slaves, function ($slave) use ($newSlave) {
+                /** @var Slave $slave */
+                return $newSlave->equals($slave);
+            })) === 0;
+
+        if ($isNew) {
+            $this->logger->info(sprintf("New slave %s up and ready.\n", $newSlave->getPort()));
             $this->slaves[] = $newSlave;
         }
     }
@@ -466,7 +488,7 @@ class ProcessManager
         $pid = (int)$data['pid'];
         $this->logger->warning(sprintf("Slave died. (pid %d)\n", $pid));
         foreach ($this->slaves as $idx => $slave) {
-            if ($slave['pid'] === $pid) {
+            if ($slave->getPid() === $pid) {
                 $this->removeSlave($idx);
             }
         }
@@ -476,8 +498,8 @@ class ProcessManager
     protected function removeSlave($idx)
     {
         $slave = $this->slaves[$idx];
-        $this->logger->warning(sprintf("Die slave %s on port %s\n", $slave['pid'], $slave['port']));
-        $slave['connection']->close();
+        $this->logger->warning(sprintf("Die slave %s on port %s\n", $slave->getPid(), $slave->getPort()));
+        $slave->getConnection()->close();
         unset($this->slaves[$idx]);
 
         /** @noinspection PhpParamsInspection */
@@ -496,7 +518,7 @@ class ProcessManager
      */
     protected function checkSlaves()
     {
-        if (!$this->run || !$this->allowNewInstances) {
+        if (!$this->running || !$this->allowNewInstances) {
             return;
         }
 
@@ -509,18 +531,21 @@ class ProcessManager
         }
     }
 
+    /**
+     * Returning active slaves.
+     * @return array
+     */
     protected function activeSlaves()
     {
         return array_filter($this->slaves, function ($slave) {
-            return !array_key_exists('shutdown', $slave);
+            /** @var Slave $slave */
+            return $slave->getStatus() === Slave::STATUS_OK;
         });
     }
 
-    private function loop()
-    {
-        $this->loop->run();
-    }
-
+    /**
+     * Create new slave instance.
+     */
     private function newInstance()
     {
         $pid = pcntl_fork();
@@ -530,7 +555,7 @@ class ProcessManager
                 new ProcessSlave($this->host, $this->port, $this->getBridge(), $this->appBootstrap, $this->appenv, $this->logFile);
             } catch (\Exception $e) {
                 foreach ($this->slaves as $idx => $slave) {
-                    if ($slave['pid'] === getmypid()) {
+                    if ($slave->getPid() === getmypid()) {
                         $this->removeSlave($idx);
                     }
                 }

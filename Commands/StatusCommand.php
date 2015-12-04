@@ -21,14 +21,14 @@ class StatusCommand extends Command
         $this
             ->setName('status')
             ->addArgument('port', InputArgument::REQUIRED, 'Controller port.')
-            ->setDescription('Status of all processes');
+            ->setDescription('Status of all processes.');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $handler = new Client($input->getArgument('port'));
         $handler->getStatus(function ($status) {
-            echo json_encode($status).PHP_EOL;
+            echo json_encode($status, JSON_PRETTY_PRINT).PHP_EOL;
         });
     }
 }
