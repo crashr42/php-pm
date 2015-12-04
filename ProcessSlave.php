@@ -200,6 +200,7 @@ class ProcessSlave
                 $socket->listen($port, $this->ppmHost);
                 $this->port = $port;
                 $this->logger->info(sprintf("Listen worker on uri http://%s:%s\n", $this->ppmHost, $port));
+                cli_set_process_title(sprintf('react slave on port %s', $port));
                 break;
             } catch (ConnectionException $e) {
                 $port++;

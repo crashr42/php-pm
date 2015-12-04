@@ -125,6 +125,8 @@ class ProcessManager
      */
     public function __construct($port = 8080, $host = '127.0.0.1', $slaveCount = 8, $workerMemoryLimit, $logFile)
     {
+        cli_set_process_title('react master');
+
         $this->slaveCount = $slaveCount;
         $this->host = $host;
         $this->port = $port;
