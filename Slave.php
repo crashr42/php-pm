@@ -137,16 +137,6 @@ class Slave
     }
 
     /**
-     * @param Slave $otherSlave
-     *
-     * @return bool
-     */
-    public function equals(Slave $otherSlave)
-    {
-        return $this->getPort() === $otherSlave->getPort();
-    }
-
-    /**
      * @return int
      */
     public function getMemory()
@@ -210,5 +200,45 @@ class Slave
         ], function ($value) {
             return $value !== null;
         });
+    }
+
+    /**
+     * @param Slave $otherSlave
+     *
+     * @return bool
+     */
+    public function equals(Slave $otherSlave)
+    {
+        return $this->getPort() === $otherSlave->getPort();
+    }
+
+    /**
+     * @param int|string $port
+     *
+     * @return bool
+     */
+    public function equalsByPort($port)
+    {
+        return $this->getPort() === (int)$port;
+    }
+
+    /**
+     * @param int|string $pid
+     *
+     * @return bool
+     */
+    public function equalsByPid($pid)
+    {
+        return $this->getPid() === (int)$pid;
+    }
+
+    /**
+     * @param Connection $connection
+     *
+     * @return bool
+     */
+    public function equalsByConnection(Connection $connection)
+    {
+        return $this->getConnection() === $connection;
     }
 }

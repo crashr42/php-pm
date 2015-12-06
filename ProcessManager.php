@@ -38,12 +38,7 @@ class ProcessManager
     /**
      * @var int
      */
-    protected $slaveCount = 1;
-
-    /**
-     * @var bool
-     */
-    protected $waitForSlaves = true;
+    protected $slavesCount = 1;
 
     /**
      * Whether the server is up and thus creates new slaves when they die or not.
@@ -83,7 +78,7 @@ class ProcessManager
     protected $port = 8080;
 
     /**
-     * @var
+     * @var Logger
      */
     protected $logger;
 
@@ -108,7 +103,7 @@ class ProcessManager
     protected $allowNewInstances = true;
 
     /**
-     * @var
+     * @var string
      */
     private $workingDirectory;
 
@@ -127,7 +122,7 @@ class ProcessManager
     {
         cli_set_process_title('react master');
 
-        $this->slaveCount        = $slaveCount;
+        $this->slavesCount       = $slaveCount;
         $this->host              = $host;
         $this->port              = $port;
         $this->workerMemoryLimit = $workerMemoryLimit * 1024 * 1024;
@@ -235,13 +230,20 @@ class ProcessManager
             }
         }, $this));
 
-        $this->running = true;
         $this->loop->run();
+        $this->running = true;
     }
 
-    private function runSlaves()
+    /**
+     * @param int $count
+     */
+    private function runSlaves($count = null)
     {
-        for ($i = 0; $i < $this->slaveCount; $i++) {
+        if ($count === null) {
+            $count = $this->slavesCount;
+        }
+
+        for ($i = 0; $i < $count; $i++) {
             $this->newInstance();
         }
     }
@@ -310,7 +312,7 @@ class ProcessManager
         }, $this));
         $conn->on('close', \Closure::bind(function () use ($conn) {
             foreach ($this->slaves as $idx => $slave) {
-                if ($slave->getConnection() === $conn) {
+                if ($slave->equalsByConnection($conn)) {
                     $this->removeSlave($idx);
                 }
             }
@@ -431,12 +433,14 @@ class ProcessManager
     protected function commandPing(array $data, Connection $conn)
     {
         foreach ($this->slaves as $idx => &$slave) {
-            if ($slave->getPid() === $data['pid']) {
+            if ($slave->equalsByPid($data['pid'])) {
                 $slave->setMemory($data['memory']);
                 $slave->setBornAt($data['born_at']);
                 $slave->setPingAt($data['ping_at']);
-                if ($data['memory'] > $this->workerMemoryLimit && !$this->hasShutdownWorkers()) {
-                    $this->logger->warning(sprintf("Worker memory limit %s exceeded.\n", $this->workerMemoryLimit));
+                if ($slave->getMemory() > $this->workerMemoryLimit && !$this->hasShutdownWorkers()) {
+                    $this->logger->warning(sprintf(
+                        "Worker memory %s of limit %s exceeded.\n", $slave->getMemory(), $this->workerMemoryLimit
+                    ));
                     $slave->setStatus(Slave::STATUS_SHUTDOWN);
                     $slave->getConnection()->write(json_encode(['cmd' => 'shutdown']));
                 }
@@ -460,7 +464,7 @@ class ProcessManager
 
     protected function commandRegister(array $data, Connection $conn)
     {
-        if (count($this->slaves) === $this->slaveCount) {
+        if (count($this->slaves) === $this->slavesCount) {
             $conn->end();
 
             return;
@@ -485,10 +489,10 @@ class ProcessManager
 
     protected function commandUnregister(array $data)
     {
-        $pid = (int)$data['pid'];
+        $pid = $data['pid'];
         $this->logger->warning(sprintf("Slave died. (pid %d)\n", $pid));
         foreach ($this->slaves as $idx => $slave) {
-            if ($slave->getPid() === $pid) {
+            if ($slave->equalsByPid($pid)) {
                 $this->removeSlave($idx);
             }
         }
@@ -522,12 +526,9 @@ class ProcessManager
             return;
         }
 
-        $i = count($this->slaves);
-        if ($this->slaveCount > $i) {
-            $this->waitForSlaves = true;
-            for (; $i < $this->slaveCount; $i++) {
-                $this->newInstance();
-            }
+        $slavesCount = count($this->slaves);
+        if ($this->slavesCount > $slavesCount) {
+            $this->runSlaves($this->slavesCount - $slavesCount);
         }
     }
 
@@ -555,7 +556,7 @@ class ProcessManager
                 new ProcessSlave($this->host, $this->port, $this->getBridge(), $this->appBootstrap, $this->appenv, $this->logFile);
             } catch (\Exception $e) {
                 foreach ($this->slaves as $idx => $slave) {
-                    if ($slave->getPid() === getmypid()) {
+                    if ($slave->equalsByPid(getmypid())) {
                         $this->removeSlave($idx);
                     }
                 }
