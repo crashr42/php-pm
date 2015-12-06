@@ -3,6 +3,7 @@
 namespace PHPPM;
 
 use React\EventLoop\Factory;
+use React\EventLoop\LoopInterface;
 use React\Socket\Connection;
 use React\Socket\ConnectionException;
 
@@ -14,7 +15,7 @@ class Client
     protected $controllerPort;
 
     /**
-     * @var \React\EventLoop\ExtEventLoop|\React\EventLoop\LibEventLoop|\React\EventLoop\LibEvLoop|\React\EventLoop\StreamSelectLoop
+     * @var LoopInterface
      */
     protected $loop;
 
