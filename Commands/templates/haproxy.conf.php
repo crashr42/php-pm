@@ -1,3 +1,12 @@
+defaults
+    mode http
+    retries 3
+    option redispatch
+    maxconn 5000
+    timeout connect 5000
+    timeout client 300000
+    timeout server 300000
+
 frontend react
     bind 0.0.0.0:8082
     mode http
