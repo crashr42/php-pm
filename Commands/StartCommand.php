@@ -24,16 +24,17 @@ class StartCommand extends Command
              $config = json_decode(file_get_contents($file), true);
         }
 
-        $bridge        = $this->defaultOrConfig($config, 'bridge', 'HttpKernel');
-        $host          = $this->defaultOrConfig($config, 'host', '127.0.0.1');
-        $port          = (int) $this->defaultOrConfig($config, 'port', 8080);
-        $workers       = (int) $this->defaultOrConfig($config, 'workers', 8);
-        $appenv        = $this->defaultOrConfig($config, 'app-env', 'dev');
-        $appBootstrap  = $this->defaultOrConfig($config, 'bootstrap', 'PHPPM\Bootstraps\Symfony');
+        $bridge         = $this->defaultOrConfig($config, 'bridge', 'HttpKernel');
+        $host           = $this->defaultOrConfig($config, 'host', '127.0.0.1');
+        $port           = (int) $this->defaultOrConfig($config, 'port', 8080);
+        $workers        = (int) $this->defaultOrConfig($config, 'workers', 8);
+        $appenv         = $this->defaultOrConfig($config, 'app-env', 'dev');
+        $appBootstrap   = $this->defaultOrConfig($config, 'bootstrap', 'PHPPM\Bootstraps\Symfony');
+        $requestTimeout = $this->defaultOrConfig($config, 'request-timeout', null);
 
         $this
             ->setName('start')
-            ->addArgument('working-directory', InputArgument::REQUIRED, 'The root of your appplication.')
+            ->addArgument('working-directory', InputArgument::REQUIRED, 'The root of your application.')
             ->addOption('log-file', null, InputOption::VALUE_OPTIONAL, 'Log file.', './react.log')
             ->addOption('bridge', null, InputOption::VALUE_OPTIONAL, 'The bridge we use to convert a ReactPHP-Request to your target framework.', $bridge)
             ->addOption('host', null, InputOption::VALUE_OPTIONAL, 'Load-Balancer host. Default is 127.0.0.1', $host)
@@ -42,6 +43,7 @@ class StartCommand extends Command
             ->addOption('app-env', null, InputOption::VALUE_OPTIONAL, 'The environment that your application will use to bootstrap (if any)', $appenv)
             ->addOption('bootstrap', null, InputOption::VALUE_OPTIONAL, 'The class that will be used to bootstrap your application', $appBootstrap)
             ->addOption('worker-memory-limit', null, InputOption::VALUE_OPTIONAL, 'Memory limit per worker.', 25)
+            ->addOption('request-timeout', null, InputOption::VALUE_OPTIONAL, 'Http request timeout is seconds.', $requestTimeout)
             ->setDescription('Starts the server')
         ;
     }
@@ -54,7 +56,7 @@ class StartCommand extends Command
 
         $config = [];
         if (file_exists($file = realpath($workingDir.'/ppm.json'))) {
-            echo sprintf("Use config file %s\n", $file);
+            echo sprintf("Use config file %s\n", $file).PHP_EOL;
             $config = json_decode(file_get_contents($file), true);
         }
 
@@ -66,8 +68,9 @@ class StartCommand extends Command
         $appBootstrap      = $this->defaultOrConfig($config, 'bootstrap', $input->getOption('bootstrap'));
         $logFile           = $this->defaultOrConfig($config, 'log-file', $input->getOption('log-file'));
         $workerMemoryLimit = $this->defaultOrConfig($config, 'worker-memory-limit', $input->getOption('worker-memory-limit'));
+        $requestTimeout    = $this->defaultOrConfig($config, 'request-timeout', $input->getOption('request-timeout'));
 
-        $handler = new ProcessManager($port, $host, $workers, $workerMemoryLimit, $logFile);
+        $handler = new ProcessManager($port, $host, $workers, $requestTimeout, $workerMemoryLimit, $logFile);
 
         $handler->setBridge($bridge);
         $handler->setAppEnv($appenv);

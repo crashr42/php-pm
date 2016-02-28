@@ -10,7 +10,9 @@
     },
     "autoload": {
         "psr-4": {
-            "PHPPM\\": ""
+            "PHPPM\\": "",
+            "PHPPM\\Bridges\\": "../web-react/Bridges",
+            "PHPPM\\Bootstraps\\": "../web-react/Bootstraps"
         }
     },
     "suggest": {
