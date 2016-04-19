@@ -108,17 +108,21 @@ class ProcessManager
     private $workingDirectory;
 
     /**
+     * @var int
+     */
+    private $requestTimeout;
+
+    /**
      * Create process manager.
      *
-     * @param int    $port
+     * @param int $port
      * @param string $host
-     * @param int    $slaveCount
-     * @param        $workerMemoryLimit
+     * @param int $slaveCount
+     * @param int $workerMemoryLimit
      * @param string $logFile
-     *
-     * @throws \Exception
+     * @param int $requestTimeout
      */
-    public function __construct($port = 8080, $host = '127.0.0.1', $slaveCount = 8, $workerMemoryLimit, $logFile)
+    public function __construct($port = 8080, $host = '127.0.0.1', $slaveCount = 8, $requestTimeout = null, $workerMemoryLimit, $logFile)
     {
         cli_set_process_title('react master');
 
@@ -126,6 +130,7 @@ class ProcessManager
         $this->host              = $host;
         $this->port              = $port;
         $this->workerMemoryLimit = $workerMemoryLimit * 1024 * 1024;
+        $this->requestTimeout    = $requestTimeout;
 
         $lineFormatter = new LineFormatter('[%datetime%] %channel%.%level_name%: %message% %context% %extra%', null, false, true);
 
@@ -141,6 +146,7 @@ class ProcessManager
         $this->logger->debug(sprintf('Workers: %s', $slaveCount));
         $this->logger->debug(sprintf('Worker memory limit: %s bytes', $this->workerMemoryLimit));
         $this->logger->debug(sprintf('Host: %s:%s', $host, $port));
+        $this->logger->debug(sprintf('Timeout: %s seconds', $this->slavePingTimeout()));
     }
 
     public function fork()
@@ -222,6 +228,8 @@ class ProcessManager
 
         $this->runSlaves();
 
+        $this->running = true;
+
         /** @noinspection PhpParamsInspection */
         $this->loop->addPeriodicTimer(1, \Closure::bind(function () {
             if (count($this->activeSlaves()) === 0) {
@@ -230,8 +238,39 @@ class ProcessManager
             }
         }, $this));
 
+        /** @noinspection PhpParamsInspection */
+        $this->loop->addPeriodicTimer(1, \Closure::bind(function () {
+            foreach ($this->slaves as $idx => $slave) {
+                if ($slave->getPingAt() === null) {
+                    continue;
+                }
+
+                if ((time() - strtotime($slave->getPingAt())) > $this->slavePingTimeout()) {
+                    $this->logger->info("Timeout ping from worker at pid {$slave->getPid()}. Killing it ...");
+                    if (posix_kill($slave->getPid(), SIGKILL)) {
+                        $this->logger->warn("Killed worker at pid {$slave->getPid()}.");
+                        $this->removeSlave($idx);
+                    } else {
+                        $this->logger->warn("Can't kill worker at pid {$slave->getPid()}.");
+                    }
+                }
+            }
+        }, $this));
+
         $this->loop->run();
-        $this->running = true;
+    }
+
+    /**
+     * Calculate slave ping timeout.
+     * @return int
+     */
+    private function slavePingTimeout()
+    {
+        if ($this->requestTimeout === null) {
+            return 30 + ProcessSlave::PING_TIMEOUT * 3;
+        }
+
+        return $this->requestTimeout;
     }
 
     /**
@@ -475,6 +514,8 @@ class ProcessManager
         $newSlave->setPort($data['port']);
         $newSlave->setHost($this->host);
         $newSlave->setConnection($conn);
+        $newSlave->setPingAt(date('Y-m-d H:i:s O'));
+        $newSlave->setBornAt(date('Y-m-d H:i:s O'));
 
         $isNew = count(array_filter($this->slaves, function ($slave) use ($newSlave) {
                 /** @var Slave $slave */
