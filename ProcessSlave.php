@@ -2,6 +2,7 @@
 
 namespace PHPPM;
 
+use Closure;
 use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\ErrorLogHandler;
 use Monolog\Handler\StreamHandler;
@@ -15,10 +16,10 @@ use React\Socket\Server;
 
 class ProcessSlave
 {
-    const PING_TIMEOUT = 5;
-    const SHUTDOWN_TIMEOUT = 1;
+    const PING_TIMEOUT              = 5;
+    const SHUTDOWN_TIMEOUT          = 1;
     const FAIL_CHECK_BEFORE_RESTART = 3;
-    const MAX_WORKERS = 200;
+    const MAX_WORKERS               = 200;
 
     /**
      * @var \React\EventLoop\LibEventLoop|\React\EventLoop\StreamSelectLoop
@@ -93,12 +94,12 @@ class ProcessSlave
     /**
      * Create slave process.
      *
-     * @param string      $ppmHost
-     * @param int         $ppmPort
+     * @param string $ppmHost
+     * @param int $ppmPort
      * @param null|string $bridgeName
-     * @param string      $appBootstrap
-     * @param string      $appenv
-     * @param string      $ppmLogFile
+     * @param string $appBootstrap
+     * @param string $appenv
+     * @param string $ppmLogFile
      *
      * @throws \Exception
      * @throws \InvalidArgumentException
@@ -161,7 +162,7 @@ class ProcessSlave
         $this->connection = new Connection($this->client, $this->loop);
 
         /** @noinspection PhpParamsInspection */
-        $this->loop->addPeriodicTimer(self::PING_TIMEOUT, \Closure::bind(function () use ($bornAt) {
+        $this->loop->addPeriodicTimer(self::PING_TIMEOUT, Closure::bind(function () use ($bornAt) {
             $result = $this->connection->write(json_encode([
                 'cmd'     => 'ping',
                 'pid'     => getmypid(),
@@ -174,10 +175,10 @@ class ProcessSlave
             }
         }, $this));
         /** @noinspection PhpParamsInspection */
-        $this->loop->addPeriodicTimer(self::SHUTDOWN_TIMEOUT, \Closure::bind(function () {
+        $this->loop->addPeriodicTimer(self::SHUTDOWN_TIMEOUT, Closure::bind(function () {
             if ($this->shutdown) {
-                $failChecked = $this->failChecked >= self::FAIL_CHECK_BEFORE_RESTART;
-                $waitChecked = $this->waitFailChecked > self::SHUTDOWN_TIMEOUT * 10;
+                $failChecked  = $this->failChecked >= self::FAIL_CHECK_BEFORE_RESTART;
+                $waitChecked  = $this->waitFailChecked > self::SHUTDOWN_TIMEOUT * 10;
                 $allowRestart = !$this->processing && ($failChecked || $waitChecked);
                 if ($allowRestart) {
                     if ($waitChecked) {
@@ -193,14 +194,14 @@ class ProcessSlave
             }
         }, $this));
 
-        $this->connection->on('data', \Closure::bind(function ($data) {
+        $this->connection->on('data', Closure::bind(function ($data) {
             $data = json_decode($data, true);
             if ($data['cmd'] === 'shutdown') {
                 $this->shutdown = true;
             }
         }, $this));
 
-        $this->connection->on('close', \Closure::bind(function () {
+        $this->connection->on('close', Closure::bind(function () {
             $this->shutdown();
         }, $this));
 
