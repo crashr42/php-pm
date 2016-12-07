@@ -498,7 +498,7 @@ class ProcessManager
             }
         }
 
-        return $hasShutdown;
+        return $hasShutdown || $this->shutdownLock;
     }
 
     protected function commandRegister(array $data, Connection $conn)
