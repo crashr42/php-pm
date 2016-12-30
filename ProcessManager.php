@@ -489,8 +489,8 @@ class ProcessManager
                     }
 
                     $cpuUsage = (int)shell_exec("ps -p {$slave->getPid()} -o %cpu | tail -n 1");
-                    if ($cpuUsage > 20) {
-                        $this->logger->warning(sprintf("Worker cpu usage %s of limit 20 exceeded.\n", $cpuUsage));
+                    if ($cpuUsage > 15) {
+                        $this->logger->warning(sprintf("Worker cpu usage %s of limit 15 exceeded.\n", $cpuUsage));
                         $slave->setStatus(Slave::STATUS_SHUTDOWN);
                         $slave->getConnection()->write(json_encode(['cmd' => 'shutdown']));
 
