@@ -476,12 +476,26 @@ class ProcessManager
                 $slave->setMemory($data['memory']);
                 $slave->setBornAt($data['born_at']);
                 $slave->setPingAt($data['ping_at']);
-                if ($slave->getMemory() > $this->workerMemoryLimit && !$this->hasShutdownWorkers()) {
-                    $this->logger->warning(sprintf(
-                        "Worker memory %s of limit %s exceeded.\n", $slave->getMemory(), $this->workerMemoryLimit
-                    ));
-                    $slave->setStatus(Slave::STATUS_SHUTDOWN);
-                    $slave->getConnection()->write(json_encode(['cmd' => 'shutdown']));
+
+                if (!$this->hasShutdownWorkers()) {
+                    if ($slave->getMemory() > $this->workerMemoryLimit) {
+                        $this->logger->warning(sprintf(
+                            "Worker memory %s of limit %s exceeded.\n", $slave->getMemory(), $this->workerMemoryLimit
+                        ));
+                        $slave->setStatus(Slave::STATUS_SHUTDOWN);
+                        $slave->getConnection()->write(json_encode(['cmd' => 'shutdown']));
+
+                        break;
+                    }
+
+                    $cpuUsage = (int)shell_exec("ps -p {$slave->getPid()} -o %cpu | tail -n 1");
+                    if ($cpuUsage > 20) {
+                        $this->logger->warning(sprintf("Worker cpu usage %s of limit 20 exceeded.\n", $cpuUsage));
+                        $slave->setStatus(Slave::STATUS_SHUTDOWN);
+                        $slave->getConnection()->write(json_encode(['cmd' => 'shutdown']));
+
+                        break;
+                    }
                 }
                 break;
             }
