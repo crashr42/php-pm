@@ -436,11 +436,7 @@ class ProcessManager
      */
     private function gracefulShutdown(Slave $slave, $slaves, Connection $client, callable $callback = null)
     {
-        foreach ($this->slaves as $idx => $origSlave) {
-            if ($slave === $origSlave) {
-                $this->slaves[$idx]->setStatus(Slave::STATUS_SHUTDOWN);
-            }
-        }
+        $slave->setStatus(Slave::STATUS_SHUTDOWN);
 
         /** @var Connection $connection */
         $slave->getConnection()->on('close', \Closure::bind(function () use ($slave, $slaves, $client, $callback) {
