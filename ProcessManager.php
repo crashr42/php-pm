@@ -278,6 +278,10 @@ class ProcessManager
      */
     private function runSlaves($count = null)
     {
+        if (!$this->allowNewInstances) {
+            return;
+        }
+
         $this->allowNewInstances = false;
 
         if ($count === null) {
