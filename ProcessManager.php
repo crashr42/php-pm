@@ -2,6 +2,7 @@
 
 namespace PHPPM;
 
+use Closure;
 use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\ErrorLogHandler;
 use Monolog\Handler\StreamHandler;
@@ -113,6 +114,11 @@ class ProcessManager
     private $requestTimeout;
 
     /**
+     * @var int
+     */
+    private $waitSlaves = 0;
+
+    /**
      * Create process manager.
      *
      * @param int $port
@@ -139,7 +145,7 @@ class ProcessManager
         $this->logger->pushHandler(new StreamHandler($logFile));
         $this->logger->pushHandler((new ErrorLogHandler())->setFormatter($lineFormatter));
 
-        set_error_handler(\Closure::bind(function ($errno, $errstr, $errfile, $errline) {
+        set_error_handler(Closure::bind(function ($errno, $errstr, $errfile, $errline) {
             $this->logger->crit(sprintf('Fatal error "[%s] %s" in %s:%s', $errno, $errstr, $errfile, $errline));
         }, $this));
 
@@ -217,7 +223,7 @@ class ProcessManager
 
         $http = new \React\Http\Server($this->controller);
         /** @noinspection PhpUnusedParameterInspection */
-        $http->on('request', \Closure::bind(function (Request $request, Response $response) {
+        $http->on('request', Closure::bind(function (Request $request, Response $response) {
             $response->writeHead();
             $response->end($this->clusterStatusAsJson());
         }, $this));
@@ -231,15 +237,15 @@ class ProcessManager
         $this->running = true;
 
         /** @noinspection PhpParamsInspection */
-        $this->loop->addPeriodicTimer(1, \Closure::bind(function () {
-            if (count($this->activeSlaves()) === 0) {
+        $this->loop->addPeriodicTimer(1, Closure::bind(function () {
+            if ($this->waitSlaves === 0 && count($this->activeSlaves()) === 0) {
                 $this->logger->crit('Slaves count zero! Run slaves!');
                 $this->runSlaves();
             }
         }, $this));
 
         /** @noinspection PhpParamsInspection */
-        $this->loop->addPeriodicTimer(1, \Closure::bind(function () {
+        $this->loop->addPeriodicTimer(1, Closure::bind(function () {
             foreach ($this->slaves as $idx => $slave) {
                 if ($slave->getPingAt() === null) {
                     continue;
@@ -358,10 +364,10 @@ class ProcessManager
 
     public function onSlaveConnection(Connection $conn)
     {
-        $conn->on('data', \Closure::bind(function ($data) use ($conn) {
+        $conn->on('data', Closure::bind(function ($data) use ($conn) {
             $this->processMessage($data, $conn);
         }, $this));
-        $conn->on('close', \Closure::bind(function () use ($conn) {
+        $conn->on('close', Closure::bind(function () use ($conn) {
             foreach ($this->slaves as $idx => $slave) {
                 if ($slave->equalsByConnection($conn)) {
                     $this->removeSlave($idx);
@@ -431,7 +437,7 @@ class ProcessManager
 
         $slaves = $this->slaves;
 
-        $this->gracefulShutdown(array_pop($slaves), $slaves, $conn, \Closure::bind(function () {
+        $this->gracefulShutdown(array_pop($slaves), $slaves, $conn, Closure::bind(function () {
             $this->logger->info('Exited.');
             $this->loop->stop();
             exit;
@@ -451,7 +457,7 @@ class ProcessManager
         $slave->setStatus(Slave::STATUS_SHUTDOWN);
 
         /** @var Connection $connection */
-        $slave->getConnection()->on('close', \Closure::bind(function () use ($slave, $slaves, $client, $callback) {
+        $slave->getConnection()->on('close', Closure::bind(function () use ($slave, $slaves, $client, $callback) {
             $message = sprintf("Shutdown http://%s:%s\n", $slave->getHost(), $slave->getPort());
             $this->logger->info($message);
             $client->write($message);
@@ -526,6 +532,8 @@ class ProcessManager
 
     protected function commandRegister(array $data, Connection $conn)
     {
+        $this->waitSlaves--;
+
         if (count($this->slaves) === $this->slavesCount) {
             $conn->end();
 
@@ -571,7 +579,7 @@ class ProcessManager
         unset($this->slaves[$idx]);
 
         /** @noinspection PhpParamsInspection */
-        $this->loop->addTimer(2, \Closure::bind(function () {
+        $this->loop->addTimer(2, Closure::bind(function () {
             while (($pid = pcntl_waitpid(-1, $pidStatus, WNOHANG)) > 0) {
                 $this->logger->debug(sprintf('Success wait child pid %s.', $pid));
             }
@@ -614,6 +622,7 @@ class ProcessManager
     private function newInstance()
     {
         $pid = pcntl_fork();
+        $this->waitSlaves++;
         if (!$pid) {
             try {
                 chdir($this->workingDirectory);
