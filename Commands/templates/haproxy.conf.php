@@ -3,6 +3,7 @@ defaults
     retries 3
     option redispatch
     maxconn 5000
+    option forwardfor
     timeout connect 5000
     timeout client 300000
     timeout server 300000
