@@ -502,7 +502,7 @@ class ProcessManager
                         break;
                     }
 
-                    $cpuLimit = 15;
+                    $cpuLimit = 10;
                     $cpuUsage = (int)shell_exec("ps -p {$slave->getPid()} -o %cpu | tail -n 1");
                     if ($cpuUsage > $cpuLimit) {
                         $this->logger->warning(sprintf("Worker cpu usage %s of limit %s exceeded.\n", $cpuLimit, $cpuUsage));
