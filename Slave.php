@@ -13,7 +13,7 @@ use React\Socket\Connection;
 
 class Slave
 {
-    const STATUS_OK = 'ok';
+    const STATUS_OK       = 'ok';
     const STATUS_SHUTDOWN = 'shutdown';
 
     /**
@@ -55,6 +55,11 @@ class Slave
      * @var string
      */
     protected $pingAt;
+
+    /**
+     * @var int
+     */
+    protected $cpuUsage;
 
     /**
      * @return Connection
@@ -190,13 +195,14 @@ class Slave
     public function asJson()
     {
         return array_filter([
-            'pid'     => $this->getPid(),
-            'host'    => $this->getHost(),
-            'port'    => $this->getPort(),
-            'status'  => $this->getStatus(),
-            'memory'  => $this->getMemory(),
-            'born_at' => $this->getBornAt(),
-            'ping_at' => $this->getPingAt(),
+            'pid'         => $this->getPid(),
+            'host'        => $this->getHost(),
+            'port'        => $this->getPort(),
+            'status'      => $this->getStatus(),
+            'memory'      => $this->getMemory(),
+            'cpu_percent' => $this->getCpuUsage(),
+            'born_at'     => $this->getBornAt(),
+            'ping_at'     => $this->getPingAt(),
         ], function ($value) {
             return $value !== null;
         });
@@ -240,5 +246,21 @@ class Slave
     public function equalsByConnection(Connection $connection)
     {
         return $this->getConnection() === $connection;
+    }
+
+    /**
+     * @param $cpuUsage
+     */
+    public function setCpuUsage($cpuUsage)
+    {
+        $this->cpuUsage = $cpuUsage;
+    }
+
+    /**
+     * @return int
+     */
+    public function getCpuUsage()
+    {
+        return $this->cpuUsage;
     }
 }

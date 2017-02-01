@@ -394,10 +394,13 @@ class ProcessManager
         if ($this->shutdownLock) {
             $data['shutdown'] = true;
         }
+
         $data['slaves'] = array_values(array_map(function ($slave) {
             /** @var Slave $slave */
             return $slave->asJson();
         }, $this->slaves));
+
+        $data['waitSlaves'] = $this->waitSlaves;
 
         return json_encode($data, JSON_PRETTY_PRINT);
     }
@@ -447,9 +450,9 @@ class ProcessManager
     /**
      * Graceful shutdown slaves.
      *
-     * @param Slave         $slave
-     * @param array         $slaves
-     * @param Connection    $client
+     * @param Slave $slave
+     * @param array $slaves
+     * @param Connection $client
      * @param callable|null $callback
      */
     private function gracefulShutdown(Slave $slave, $slaves, Connection $client, callable $callback = null)
@@ -491,6 +494,9 @@ class ProcessManager
                 $slave->setBornAt($data['born_at']);
                 $slave->setPingAt($data['ping_at']);
 
+                $cpuUsage = (int)shell_exec("ps -p {$slave->getPid()} -o %cpu | tail -n 1");
+                $slave->setCpuUsage($cpuUsage);
+
                 if (!$this->hasShutdownWorkers()) {
                     if ($slave->getMemory() > $this->workerMemoryLimit) {
                         $this->logger->warning(sprintf(
@@ -503,7 +509,6 @@ class ProcessManager
                     }
 
                     $cpuLimit = 10;
-                    $cpuUsage = (int)shell_exec("ps -p {$slave->getPid()} -o %cpu | tail -n 1");
                     if ($cpuUsage > $cpuLimit) {
                         $this->logger->warning(sprintf("Worker cpu usage %s of limit %s exceeded.\n", $cpuLimit, $cpuUsage));
                         $slave->setStatus(Slave::STATUS_SHUTDOWN);
