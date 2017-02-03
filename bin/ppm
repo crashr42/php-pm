@@ -1,4 +1,5 @@
 #!/usr/bin/env php
+
 <?php
 
 date_default_timezone_set('UTC');
@@ -9,6 +10,7 @@ function includeIfExists($file)
     if (file_exists($file)) {
         return include $file;
     }
+    return false;
 }
 
 if ((!$loader = includeIfExists(__DIR__.'/../vendor/autoload.php')) && (!$loader = includeIfExists(__DIR__.'/../../../autoload.php'))) {
@@ -19,16 +21,16 @@ if ((!$loader = includeIfExists(__DIR__.'/../vendor/autoload.php')) && (!$loader
     );
 }
 
-use PHPPM\Commands\HAProxyCommand;
-use PHPPM\Commands\RestartCommand;
-use PHPPM\Commands\StopCommand;
+use PHPPM\Console\Commands\HAProxyCommand;
+use PHPPM\Console\Commands\RestartCommand;
+use PHPPM\Console\Commands\StartCommand;
+use PHPPM\Console\Commands\StatusCommand;
+use PHPPM\Console\Commands\StopCommand;
 use Symfony\Component\Console\Application;
-use PHPPM\Commands\StartCommand;
-use PHPPM\Commands\StatusCommand;
 
 $app = new Application('PHP-PM');
-$app->add(new StartCommand);
-$app->add(new StatusCommand);
+$app->add(new StartCommand());
+$app->add(new StatusCommand());
 $app->add(new RestartCommand());
 $app->add(new StopCommand());
 $app->add(new HAProxyCommand());

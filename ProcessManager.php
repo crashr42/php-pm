@@ -7,6 +7,7 @@ use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\ErrorLogHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
+use PHPPM\Control\ControlCommand;
 use React\EventLoop\Factory;
 use React\Http\Request;
 use React\Http\Response;
@@ -81,7 +82,7 @@ class ProcessManager
     /**
      * @var Logger
      */
-    protected $logger;
+    public $logger;
 
     /**
      * @var string
@@ -91,7 +92,7 @@ class ProcessManager
     /**
      * @var int
      */
-    protected $workerMemoryLimit;
+    public $workerMemoryLimit;
 
     /**
      * @var bool
@@ -221,7 +222,7 @@ class ProcessManager
         $this->controller->on('connection', [$this, 'onSlaveConnection']);
         $this->controller->listen($this->port, $this->host);
 
-        $http = new \React\Http\Server($this->controller);
+        $http = new \PHPPM\Server($this->controller);
         /** @noinspection PhpUnusedParameterInspection */
         $http->on('request', Closure::bind(function (Request $request, Response $response) {
             $response->writeHead();
@@ -238,10 +239,7 @@ class ProcessManager
 
         /** @noinspection PhpParamsInspection */
         $this->loop->addPeriodicTimer(1, Closure::bind(function () {
-            if ($this->waitSlaves === 0 && count($this->activeSlaves()) === 0) {
-                $this->logger->crit('Slaves count zero! Run slaves!');
-                $this->runSlaves();
-            }
+            $this->checkSlaves();
         }, $this));
 
         /** @noinspection PhpParamsInspection */
@@ -280,9 +278,9 @@ class ProcessManager
     }
 
     /**
-     * @param int $count
+     * Run slaves one by one.
      */
-    private function runSlaves($count = null)
+    private function runSlaves()
     {
         if (!$this->allowNewInstances) {
             return;
@@ -290,13 +288,7 @@ class ProcessManager
 
         $this->allowNewInstances = false;
 
-        if ($count === null) {
-            $count = $this->slavesCount;
-        }
-
-        if ($count === count($this->slaves)) {
-            return;
-        }
+        $count = 1;
 
         for ($i = 0; $i < $count; $i++) {
             $this->newInstance();
@@ -380,6 +372,20 @@ class ProcessManager
     {
         $data = json_decode($data, true);
 
+//        $data = json_decode($data, true);
+//
+//        $commandClass = sprintf('PHPPM\\Control\\Commands\\%sCommand', ucfirst($data['cmd']);
+//        if (class_exists($commandClass, false)) {
+//            /** @var ControlCommand $command */
+//            $command = new $commandClass;
+//
+//            $command->handle($data, $connection, $this);
+//
+//            if (method_exists($this, $method) && is_callable([$this, $method])) {
+//                $this->$method($data, $connection);
+//            }
+//        }
+
         $method = 'command'.ucfirst($data['cmd']);
         if (method_exists($this, $method) && is_callable([$this, $method])) {
             $this->$method($data, $conn);
@@ -388,19 +394,18 @@ class ProcessManager
 
     private function clusterStatusAsJson()
     {
-        $data['pid']  = getmypid();
-        $data['host'] = $this->host;
-        $data['port'] = $this->port;
-        if ($this->shutdownLock) {
-            $data['shutdown'] = true;
-        }
+        $data['pid']                 = getmypid();
+        $data['host']                = $this->host;
+        $data['port']                = $this->port;
+        $data['shutdown_lock']       = $this->shutdownLock;
+        $data['waited_slaves']       = $this->waitSlaves;
+        $data['slaves_count']        = count($this->slaves);
+        $data['allow_new_instances'] = $this->allowNewInstances;
 
         $data['slaves'] = array_values(array_map(function ($slave) {
             /** @var Slave $slave */
             return $slave->asJson();
         }, $this->slaves));
-
-        $data['waitSlaves'] = $this->waitSlaves;
 
         return json_encode($data, JSON_PRETTY_PRINT);
     }
@@ -408,6 +413,14 @@ class ProcessManager
     public function setWorkingDirectory($workingDir)
     {
         $this->workingDirectory = $workingDir;
+    }
+
+    /**
+     * @return Slave[]
+     */
+    public function getSlaves()
+    {
+        return $this->slaves;
     }
 
     protected function commandRestart(array $data, Connection $conn)
@@ -441,7 +454,7 @@ class ProcessManager
         $slaves = $this->slaves;
 
         $this->gracefulShutdown(array_pop($slaves), $slaves, $conn, Closure::bind(function () {
-            $this->logger->info('Exited.');
+            $this->logger->info('Cluster shutdown.');
             $this->loop->stop();
             exit;
         }, $this));
@@ -471,7 +484,7 @@ class ProcessManager
                 if ($callback !== null) {
                     $callback();
                 }
-                $client->write('Cluster fully shutdown.');
+                $client->write('Last worker shutdown.');
                 $client->end();
             }
         }, $this));
@@ -522,7 +535,7 @@ class ProcessManager
         }
     }
 
-    private function hasShutdownWorkers()
+    public function hasShutdownWorkers()
     {
         $hasShutdown = false;
         foreach ($this->slaves as $slave) {
@@ -594,18 +607,19 @@ class ProcessManager
     }
 
     /**
-     * TODO: возможно ситуация при которой кол-во slave процессов создастся больше чем нужно,
-     * TODO: из-за того что уже созданные еще не успели зарегаться.
+     * Check slaves count and run new slave if count less then needed.
      */
     protected function checkSlaves()
     {
-        if (!$this->running || !$this->allowNewInstances) {
+        if (!$this->running || !$this->allowNewInstances || $this->waitSlaves > 0) {
             return;
         }
 
         $slavesCount = count($this->slaves);
         if ($this->slavesCount > $slavesCount) {
-            $this->runSlaves($this->slavesCount - $slavesCount);
+            $this->logger->warning('Slaves count less then needed.');
+
+            $this->runSlaves();
         }
     }
 
@@ -626,8 +640,10 @@ class ProcessManager
      */
     private function newInstance()
     {
-        $pid = pcntl_fork();
+        $this->logger->debug('Fork new slave.');
+
         $this->waitSlaves++;
+        $pid = pcntl_fork();
         if (!$pid) {
             try {
                 chdir($this->workingDirectory);

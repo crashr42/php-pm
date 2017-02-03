@@ -1,6 +1,6 @@
 <?php
 
-namespace PHPPM\Commands;
+namespace PHPPM\Console\Commands;
 
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;

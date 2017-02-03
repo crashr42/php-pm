@@ -9,6 +9,7 @@
 
 namespace PHPPM;
 
+use Carbon\Carbon;
 use React\Socket\Connection;
 
 class Slave
@@ -203,6 +204,7 @@ class Slave
             'cpu_percent' => $this->getCpuUsage(),
             'born_at'     => $this->getBornAt(),
             'ping_at'     => $this->getPingAt(),
+            'uptime'      => Carbon::parse($this->getBornAt())->diff(Carbon::parse($this->getPingAt()))->format('%Y-%M-%D %H:%M:%S'),
         ], function ($value) {
             return $value !== null;
         });

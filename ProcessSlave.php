@@ -206,7 +206,7 @@ class ProcessSlave
         }, $this));
 
         $socket = new Server($this->loop);
-        $http   = new \React\Http\Server($socket);
+        $http   = new \PHPPM\Server($socket);
         $http->on('request', [$this, 'onRequest']);
 
         $port    = $this->ppmPort;
@@ -236,6 +236,8 @@ class ProcessSlave
 
             return;
         }
+
+        $this->logger->debug($request->getPath());
 
         $this->processing = true;
         if ($bridge = $this->getBridge()) {

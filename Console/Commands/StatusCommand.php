@@ -1,12 +1,6 @@
 <?php
-/**
- * Created by PhpStorm.
- * User: nikita
- * Date: 17.10.15
- * Time: 20:45
- */
 
-namespace PHPPM\Commands;
+namespace PHPPM\Console\Commands;
 
 use PHPPM\Client;
 use Symfony\Component\Console\Command\Command;
@@ -14,7 +8,7 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
-class RestartCommand extends Command
+class StatusCommand extends Command
 {
     /**
      * {@inheritdoc}
@@ -25,16 +19,16 @@ class RestartCommand extends Command
         parent::configure();
 
         $this
-            ->setName('restart')
-            ->addArgument('port', InputArgument::REQUIRED, 'Controller port')
-            ->setDescription('Restart of all processes');
+            ->setName('status')
+            ->addArgument('port', InputArgument::REQUIRED, 'Controller port.')
+            ->setDescription('Status of all processes.');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $handler = new Client($input->getArgument('port'));
-        $handler->restart(function ($status) {
-            echo $status.PHP_EOL;
+        $handler->getStatus(function ($status) {
+            echo json_encode($status, JSON_PRETTY_PRINT).PHP_EOL;
         });
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-namespace PHPPM\Commands;
+namespace PHPPM\Console\Commands;
 
 use PHPPM\Client;
 use Symfony\Component\Console\Command\Command;
