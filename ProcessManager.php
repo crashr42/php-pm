@@ -16,9 +16,9 @@ use React\Socket\Server;
 class ProcessManager
 {
     /**
-     * @var Slave[]
+     * @var SlavesCollection
      */
-    protected $slaves = [];
+    protected $slaves;
 
     /**
      * @var \React\EventLoop\LibEventLoop|\React\EventLoop\StreamSelectLoop
@@ -41,11 +41,6 @@ class ProcessManager
      * @var bool
      */
     protected $running = false;
-
-    /**
-     * @var int
-     */
-    protected $index = 0;
 
     /**
      * @var Logger
@@ -80,6 +75,7 @@ class ProcessManager
     public function __construct(ConfigReader $config)
     {
         $this->config = $config;
+        $this->slaves = new SlavesCollection();
 
         cli_set_process_title('react master');
 
@@ -110,7 +106,7 @@ class ProcessManager
 
         /** @noinspection PhpParamsInspection */
         $this->loop->addPeriodicTimer(1, Closure::bind(function () {
-            foreach ($this->slaves as $idx => $slave) {
+            foreach ($this->slaves->getSlaves() as $slave) {
                 if ($slave->getPingAt() === null) {
                     continue;
                 }
@@ -119,7 +115,7 @@ class ProcessManager
                     $this->logger->info("Timeout ping from worker at pid {$slave->getPid()}. Killing it ...");
                     if (posix_kill($slave->getPid(), SIGKILL)) {
                         $this->logger->warn("Killed worker at pid {$slave->getPid()}.");
-                        $this->removeSlave($idx);
+                        $this->removeSlave($slave);
                     } else {
                         $this->logger->warn("Can't kill worker at pid {$slave->getPid()}.");
                     }
@@ -154,28 +150,9 @@ class ProcessManager
 
         $this->allowNewInstances = false;
 
-        $count = 1;
-
-        for ($i = 0; $i < $count; $i++) {
-            $this->newInstance();
-        }
+        $this->forkSlave();
 
         $this->allowNewInstances = true;
-    }
-
-    /**
-     * @return integer
-     */
-    public function getNextSlave()
-    {
-        $count = count($this->activeSlaves());
-
-        $this->index++;
-        if ($count >= $this->index) {
-            $this->index = 0;
-        }
-
-        return $this->index;
     }
 
     /**
@@ -207,29 +184,9 @@ class ProcessManager
         $data['slaves'] = array_values(array_map(function ($slave) {
             /** @var Slave $slave */
             return $slave->asJson();
-        }, $this->slaves));
+        }, $this->slaves->getSlaves()));
 
         return json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-    }
-
-    /**
-     * Get all slaves.
-     *
-     * @return Slave[]
-     */
-    public function getSlaves()
-    {
-        return $this->slaves;
-    }
-
-    /**
-     * Add new slave.
-     *
-     * @param Slave $slave
-     */
-    public function addSlave(Slave $slave)
-    {
-        $this->slaves[] = $slave;
     }
 
     /**
@@ -270,25 +227,62 @@ class ProcessManager
      *
      * @return bool
      */
-    public function hasShutdownWorkers()
+    public function hasShutdownSlaves()
     {
-        $hasShutdown = false;
-        foreach ($this->slaves as $slave) {
-            if ($slave->getStatus() === Slave::STATUS_SHUTDOWN) {
-                $hasShutdown = true;
-                break;
-            }
-        }
-
-        return $hasShutdown || $this->shutdownLock;
+        return $this->slaves->hasShutdownSlaves() || $this->shutdownLock;
     }
 
-    public function removeSlave($idx)
+    /**
+     * Check slaves count and run new slave if count less then needed.
+     */
+    public function checkSlaves()
     {
-        $slave = $this->slaves[$idx];
+        $this->logger->debug('Check slaves.');
+
+        if (!$this->running || !$this->allowNewInstances || $this->waitedSlaves > 0) {
+            return;
+        }
+
+        $slavesCount = count($this->slaves->getSlaves());
+        if ($this->config->workers > $slavesCount) {
+            $this->logger->warning('Slaves count less then needed.');
+
+            $this->runSlaves();
+        }
+    }
+
+    /**
+     * Create new slave instance.
+     */
+    private function forkSlave()
+    {
+        $this->logger->debug('Fork new slave.');
+
+        $this->waitedSlaves++;
+        $pid = pcntl_fork();
+        if (!$pid) {
+            try {
+                chdir($this->config->working_directory);
+                new ProcessSlave($this->config);
+            } catch (Exception $e) {
+                foreach ($this->slaves->getSlaves() as $slave) {
+                    if ($slave->equalsByPid(getmypid())) {
+                        $this->removeSlave($slave);
+                    }
+                }
+                $this->logger->error($e->getMessage(), $e->getTrace());
+            }
+            exit;
+        }
+    }
+
+    private function removeSlave(Slave $slave)
+    {
         $this->logger->warning(sprintf("Die slave %s on port %s\n", $slave->getPid(), $slave->getPort()));
+
+        $this->slaves->removeSlave($slave);
+
         $slave->getConnection()->close();
-        unset($this->slaves[$idx]);
 
         /** @noinspection PhpParamsInspection */
         $this->loop->addTimer(2, Closure::bind(function () {
@@ -300,57 +294,8 @@ class ProcessManager
         $this->checkSlaves();
     }
 
-    /**
-     * Check slaves count and run new slave if count less then needed.
-     */
-    public function checkSlaves()
+    public function slavesCollection()
     {
-        if (!$this->running || !$this->allowNewInstances || $this->waitedSlaves > 0) {
-            return;
-        }
-
-        $slavesCount = count($this->slaves);
-        if ($this->config->workers > $slavesCount) {
-            $this->logger->warning('Slaves count less then needed.');
-
-            $this->runSlaves();
-        }
-    }
-
-    /**
-     * Returning active slaves.
-     * @return array
-     */
-    public function activeSlaves()
-    {
-        return array_filter($this->slaves, function ($slave) {
-            /** @var Slave $slave */
-            return $slave->getStatus() === Slave::STATUS_OK;
-        });
-    }
-
-    /**
-     * Create new slave instance.
-     */
-    private function newInstance()
-    {
-        $this->logger->debug('Fork new slave.');
-
-        $this->waitedSlaves++;
-        $pid = pcntl_fork();
-        if (!$pid) {
-            try {
-                chdir($this->config->working_directory);
-                new ProcessSlave($this->config);
-            } catch (Exception $e) {
-                foreach ($this->slaves as $idx => $slave) {
-                    if ($slave->equalsByPid(getmypid())) {
-                        $this->removeSlave($idx);
-                    }
-                }
-                $this->logger->error($e->getMessage(), $e->getTrace());
-            }
-            exit;
-        }
+        return $this->slaves;
     }
 }

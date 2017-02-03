@@ -46,9 +46,9 @@ class MasterControlChannel
             $this->manager->processControlCommand($data, $conn);
         }, $this));
         $conn->on('close', Closure::bind(function () use ($conn) {
-            foreach ($this->manager->getSlaves() as $idx => $slave) {
+            foreach ($this->manager->slavesCollection()->getSlaves() as $slave) {
                 if ($slave->equalsByConnection($conn)) {
-                    $this->manager->removeSlave($idx);
+                    $this->manager->slavesCollection()->removeSlave($slave);
                 }
             }
         }, $this));

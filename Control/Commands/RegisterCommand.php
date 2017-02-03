@@ -20,7 +20,7 @@ class RegisterCommand extends ControlCommand
     {
         $manager->waitedSlaves--;
 
-        if (count($manager->getSlaves()) === $manager->config->workers) {
+        if (count($manager->slavesCollection()) === $manager->config->workers) {
             $manager->logger->warning('All slaves already spawned. Reject slave.');
 
             $connection->end();
@@ -36,14 +36,14 @@ class RegisterCommand extends ControlCommand
         $newSlave->setPingAt(date('Y-m-d H:i:s O'));
         $newSlave->setBornAt(date('Y-m-d H:i:s O'));
 
-        $isNew = count(array_filter($manager->getSlaves(), function ($slave) use ($newSlave) {
+        $isNew = count(array_filter($manager->slavesCollection()->getSlaves(), function ($slave) use ($newSlave) {
                 /** @var Slave $slave */
                 return $newSlave->equals($slave);
             })) === 0;
 
         if ($isNew) {
             $manager->logger->info(sprintf("New slave %s up and ready.\n", $newSlave->getPort()));
-            $manager->addSlave($newSlave);
+            $manager->slavesCollection()->addSlave($newSlave);
         }
     }
 

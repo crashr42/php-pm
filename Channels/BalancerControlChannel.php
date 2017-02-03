@@ -43,8 +43,8 @@ class BalancerControlChannel
     public function onWeb(Connection $incoming)
     {
         do {
-            $slaves  = array_values($this->manager->activeSlaves());
-            $slaveId = $this->manager->getNextSlave();
+            $slaves  = array_values($this->manager->slavesCollection()->activeSlaves());
+            $slaveId = $this->manager->slavesCollection()->getNextSlave();
         } while (!array_key_exists($slaveId, $slaves));
 
         /** @var Slave $slave */

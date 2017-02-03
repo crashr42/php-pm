@@ -19,9 +19,9 @@ class UnregisterCommand extends ControlCommand
     {
         $pid = $this->data['pid'];
         $manager->logger->warning(sprintf("Slave died. (pid %d)\n", $pid));
-        foreach ($manager->getSlaves() as $idx => $slave) {
+        foreach ($manager->slavesCollection()->getSlaves() as $idx => $slave) {
             if ($slave->equalsByPid($pid)) {
-                $manager->removeSlave($idx);
+                $manager->slavesCollection()->removeSlave($idx);
             }
         }
         $manager->checkSlaves();

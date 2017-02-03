@@ -17,9 +17,9 @@ class PingCommand extends ControlCommand
 {
     public function handle(Connection $connection, ProcessManager $manager)
     {
-        $slaves = $manager->getSlaves();
+        $slaves = $manager->slavesCollection();
 
-        foreach ($slaves as $idx => &$slave) {
+        foreach ($slaves->getSlaves() as $idx => &$slave) {
             if ($slave->equalsByPid($this->data['pid'])) {
                 $slave->setMemory($this->data['memory']);
                 $slave->setBornAt($this->data['born_at']);
@@ -28,7 +28,7 @@ class PingCommand extends ControlCommand
                 $cpuUsage = (int)shell_exec("ps -p {$slave->getPid()} -o %cpu | tail -n 1");
                 $slave->setCpuUsage($cpuUsage);
 
-                if ($manager->hasShutdownWorkers()) {
+                if ($manager->hasShutdownSlaves()) {
                     break;
                 }
                 if ($slave->getMemory() > $manager->config->worker_memory_limit) {
