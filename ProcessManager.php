@@ -4,10 +4,6 @@ namespace PHPPM;
 
 use Closure;
 use Exception;
-use Monolog\Formatter\LineFormatter;
-use Monolog\Handler\ErrorLogHandler;
-use Monolog\Handler\StreamHandler;
-use Monolog\Logger;
 use PHPPM\Config\ConfigReader;
 use PHPPM\Control\ControlCommand;
 use React\EventLoop\Factory;
@@ -87,11 +83,7 @@ class ProcessManager
 
         cli_set_process_title('react master');
 
-        $lineFormatter = new LineFormatter('[%datetime%] %channel%.%level_name%: %message% %context% %extra%', null, true, true);
-
-        $this->logger = new Logger(static::class);
-        $this->logger->pushHandler(new StreamHandler($config->log_file));
-        $this->logger->pushHandler((new ErrorLogHandler())->setFormatter($lineFormatter));
+        $this->logger = Logger::get(static::class, $config->log_file);
 
         set_error_handler(Closure::bind(function ($errno, $errstr, $errfile, $errline) {
             $this->logger->crit(sprintf('Fatal error "[%s] %s" in %s:%s', $errno, $errstr, $errfile, $errline), func_get_args());

@@ -3,10 +3,6 @@
 namespace PHPPM;
 
 use Closure;
-use Monolog\Formatter\LineFormatter;
-use Monolog\Handler\ErrorLogHandler;
-use Monolog\Handler\StreamHandler;
-use Monolog\Logger;
 use PHPPM\Config\ConfigReader;
 use React\EventLoop\Factory;
 use React\Http\Request;
@@ -84,11 +80,7 @@ class ProcessSlave
     {
         $this->config = $config;
 
-        $lineFormatter = new LineFormatter('[%datetime%] %channel%.%level_name%: %message% %context% %extra%', null, false, true);
-
-        $this->logger = new Logger(static::class);
-        $this->logger->pushHandler(new StreamHandler($config->log_file));
-        $this->logger->pushHandler((new ErrorLogHandler())->setFormatter($lineFormatter));
+        $this->logger = Logger::get(static::class, $config->log_file);
 
         $this->bootstrap($config->bootstrap, $config->appenv);
         $this->connectToMaster();
