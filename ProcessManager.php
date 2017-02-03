@@ -5,6 +5,7 @@ namespace PHPPM;
 use Closure;
 use Exception;
 use PHPPM\Config\ConfigReader;
+use PHPPM\Control\Commands\ShutdownCommand;
 use PHPPM\Control\ControlCommand;
 use React\EventLoop\Factory;
 use React\Http\Request;
@@ -89,21 +90,7 @@ class ProcessManager
             $this->logger->crit(sprintf('Fatal error "[%s] %s" in %s:%s', $errno, $errstr, $errfile, $errline), func_get_args());
         }, $this));
 
-        $this->logger->debug(sprintf('Workers: %s', $config->workers));
-        $this->logger->debug(sprintf('Worker memory limit: %s bytes', $config->worker_memory_limit));
-        $this->logger->debug(sprintf('Host: %s:%s', $config->host, $config->port));
-        $this->logger->debug(sprintf('Timeout: %s seconds', $this->slavePingTimeout()));
-    }
-
-    public function fork()
-    {
-        if ($this->running) {
-            throw new \LogicException('Can not fork when already run.');
-        }
-
-        if (!pcntl_fork()) {
-            $this->run();
-        }
+        $this->logger->info('Config: '.json_encode($config->getArrayCopy(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
 
     public function run()
@@ -266,19 +253,12 @@ class ProcessManager
      */
     public function processControlCommand($raw, Connection $connection)
     {
-        $data = json_decode($raw, true);
-
-        $commandClass = sprintf('PHPPM\\Control\\Commands\\%sCommand', ucfirst($data['cmd']));
-        if (!class_exists($commandClass)) {
-            $this->logger->warning("Unknown command `{$raw}`. Class not found `{$commandClass}`.");
+        if ($command = ControlCommand::find($raw)) {
+            $command->handle($connection, $this);
+        } else {
+            $this->logger->warning("Unknown command `{$raw}`.");
             $connection->close();
-
-            return;
         }
-
-        /** @var ControlCommand $command */
-        $command = new $commandClass;
-        $command->handle($data, $connection, $this);
     }
 
     public function clusterStatusAsJson()
@@ -348,7 +328,8 @@ class ProcessManager
             }
         }, $this));
         $client->write(sprintf('Try shutdown http://%s:%s', $slave->getHost(), $slave->getPort()));
-        $slave->getConnection()->write(json_encode(['cmd' => 'shutdown']));
+
+        $slave->getConnection()->write((new ShutdownCommand())->serialize());
     }
 
     /**

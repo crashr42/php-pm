@@ -4,6 +4,10 @@ namespace PHPPM;
 
 use Closure;
 use PHPPM\Config\ConfigReader;
+use PHPPM\Control\Commands\RegisterCommand;
+use PHPPM\Control\Commands\ShutdownCommand;
+use PHPPM\Control\Commands\UnregisterCommand;
+use PHPPM\Control\ControlCommand;
 use React\EventLoop\Factory;
 use React\Http\Request;
 use React\Http\Response;
@@ -160,9 +164,8 @@ class ProcessSlave
             }
         }, $this));
 
-        $this->connection->on('data', Closure::bind(function ($data) {
-            $data = json_decode($data, true);
-            if ($data['cmd'] === 'shutdown') {
+        $this->connection->on('data', Closure::bind(function ($raw) {
+            if (($command = ControlCommand::find($raw)) && $command instanceof ShutdownCommand) {
                 $this->shutdown = true;
             }
         }, $this));
@@ -189,7 +192,7 @@ class ProcessSlave
             }
         }
 
-        $this->connection->write(json_encode(['cmd' => 'register', 'pid' => getmypid(), 'port' => $port]));
+        $this->connection->write((new RegisterCommand())->serialize(getmypid(), $port));
     }
 
     public function onRequest(Request $request, Response $response)
@@ -218,7 +221,7 @@ class ProcessSlave
     public function bye()
     {
         if ($this->connection->isWritable()) {
-            $this->connection->write(json_encode(['cmd' => 'unregister', 'pid' => getmypid()]));
+            $this->connection->write((new UnregisterCommand())->serialize(getmypid()));
             $this->connection->close();
         }
         $this->loop->stop();

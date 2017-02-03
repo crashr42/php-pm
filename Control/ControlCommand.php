@@ -12,7 +12,33 @@ use React\Socket\Connection;
  */
 abstract class ControlCommand
 {
-    public abstract function handle($data, Connection $connection, ProcessManager $manager);
+    protected $data;
+
+    public function __construct(array $data = [])
+    {
+        $this->data = $data;
+    }
+
+    public abstract function handle(Connection $connection, ProcessManager $manager);
 
     public abstract function serialize();
+
+    /**
+     * Find and create control command.
+     *
+     * @param string $raw
+     * @return bool|ControlCommand
+     */
+    public static function find($raw)
+    {
+        $data = json_decode($raw, true);
+
+        $commandClass = sprintf('PHPPM\\Control\\Commands\\%sCommand', ucfirst($data['cmd']));
+
+        if (class_exists($commandClass)) {
+            return new $commandClass($data);
+        }
+
+        return false;
+    }
 }

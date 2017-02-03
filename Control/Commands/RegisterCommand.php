@@ -16,7 +16,7 @@ use React\Socket\Connection;
 
 class RegisterCommand extends ControlCommand
 {
-    public function handle($data, Connection $connection, ProcessManager $manager)
+    public function handle(Connection $connection, ProcessManager $manager)
     {
         $manager->waitedSlaves--;
 
@@ -29,8 +29,8 @@ class RegisterCommand extends ControlCommand
         }
 
         $newSlave = new Slave();
-        $newSlave->setPid($data['pid']);
-        $newSlave->setPort($data['port']);
+        $newSlave->setPid($this->data['pid']);
+        $newSlave->setPort($this->data['port']);
         $newSlave->setHost($manager->config->host);
         $newSlave->setConnection($connection);
         $newSlave->setPingAt(date('Y-m-d H:i:s O'));
@@ -49,6 +49,6 @@ class RegisterCommand extends ControlCommand
 
     public function serialize()
     {
-        return json_encode(['cmd' => 'register']);
+        return json_encode(['cmd' => 'register', 'pid' => func_get_arg(0), 'port' => func_get_arg(1)]);
     }
 }

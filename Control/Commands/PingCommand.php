@@ -15,15 +15,15 @@ use React\Socket\Connection;
  */
 class PingCommand extends ControlCommand
 {
-    public function handle($data, Connection $connection, ProcessManager $manager)
+    public function handle(Connection $connection, ProcessManager $manager)
     {
         $slaves = $manager->getSlaves();
 
         foreach ($slaves as $idx => &$slave) {
-            if ($slave->equalsByPid($data['pid'])) {
-                $slave->setMemory($data['memory']);
-                $slave->setBornAt($data['born_at']);
-                $slave->setPingAt($data['ping_at']);
+            if ($slave->equalsByPid($this->data['pid'])) {
+                $slave->setMemory($this->data['memory']);
+                $slave->setBornAt($this->data['born_at']);
+                $slave->setPingAt($this->data['ping_at']);
 
                 $cpuUsage = (int)shell_exec("ps -p {$slave->getPid()} -o %cpu | tail -n 1");
                 $slave->setCpuUsage($cpuUsage);

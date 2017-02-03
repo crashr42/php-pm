@@ -15,9 +15,9 @@ use React\Socket\Connection;
 
 class UnregisterCommand extends ControlCommand
 {
-    public function handle($data, Connection $connection, ProcessManager $manager)
+    public function handle(Connection $connection, ProcessManager $manager)
     {
-        $pid = $data['pid'];
+        $pid = $this->data['pid'];
         $manager->logger->warning(sprintf("Slave died. (pid %d)\n", $pid));
         foreach ($manager->getSlaves() as $idx => $slave) {
             if ($slave->equalsByPid($pid)) {
@@ -29,6 +29,6 @@ class UnregisterCommand extends ControlCommand
 
     public function serialize()
     {
-        return json_encode(['cmd' => 'unregister']);
+        return json_encode(['cmd' => 'unregister', 'pid' => func_get_arg(0)]);
     }
 }
