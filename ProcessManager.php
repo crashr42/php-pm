@@ -8,6 +8,7 @@ use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\ErrorLogHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
+use PHPPM\Config\ConfigReader;
 use PHPPM\Control\ControlCommand;
 use React\EventLoop\Factory;
 use React\Http\Request;
@@ -39,11 +40,6 @@ class ProcessManager
     protected $web;
 
     /**
-     * @var int
-     */
-    public $slavesCount = 1;
-
-    /**
      * Whether the server is up and thus creates new slaves when they die or not.
      *
      * @var bool
@@ -56,44 +52,9 @@ class ProcessManager
     protected $index = 0;
 
     /**
-     * @var string
-     */
-    protected $bridge;
-
-    /**
-     * @var string
-     */
-    protected $appBootstrap;
-
-    /**
-     * @var string|null
-     */
-    protected $appenv;
-
-    /**
-     * @var string
-     */
-    public $host = '127.0.0.1';
-
-    /**
-     * @var int
-     */
-    protected $port = 8080;
-
-    /**
      * @var Logger
      */
     public $logger;
-
-    /**
-     * @var string
-     */
-    protected $logFile;
-
-    /**
-     * @var int
-     */
-    public $workerMemoryLimit;
 
     /**
      * @var bool
@@ -106,54 +67,39 @@ class ProcessManager
     public $allowNewInstances = true;
 
     /**
-     * @var string
-     */
-    private $workingDirectory;
-
-    /**
      * @var int
      */
-    private $requestTimeout;
+    public $waitedSlaves = 0;
 
     /**
-     * @var int
+     * @var ConfigReader
      */
-    public $waitSlaves = 0;
+    public $config;
 
     /**
      * Create process manager.
      *
-     * @param int $port
-     * @param string $host
-     * @param int $slaveCount
-     * @param int $workerMemoryLimit
-     * @param string $logFile
-     * @param int $requestTimeout
+     * @param ConfigReader $config
      */
-    public function __construct($port = 8080, $host = '127.0.0.1', $slaveCount = 8, $requestTimeout = null, $workerMemoryLimit, $logFile)
+    public function __construct(ConfigReader $config)
     {
-        cli_set_process_title('react master');
+        $this->config = $config;
 
-        $this->slavesCount       = $slaveCount;
-        $this->host              = $host;
-        $this->port              = $port;
-        $this->workerMemoryLimit = $workerMemoryLimit * 1024 * 1024;
-        $this->requestTimeout    = $requestTimeout;
+        cli_set_process_title('react master');
 
         $lineFormatter = new LineFormatter('[%datetime%] %channel%.%level_name%: %message% %context% %extra%', null, true, true);
 
-        $this->logFile = $logFile;
-        $this->logger  = new Logger(static::class);
-        $this->logger->pushHandler(new StreamHandler($logFile));
+        $this->logger = new Logger(static::class);
+        $this->logger->pushHandler(new StreamHandler($config->log_file));
         $this->logger->pushHandler((new ErrorLogHandler())->setFormatter($lineFormatter));
 
         set_error_handler(Closure::bind(function ($errno, $errstr, $errfile, $errline) {
-            $this->logger->crit(sprintf('Fatal error "[%s] %s" in %s:%s', $errno, $errstr, $errfile, $errline));
+            $this->logger->crit(sprintf('Fatal error "[%s] %s" in %s:%s', $errno, $errstr, $errfile, $errline), func_get_args());
         }, $this));
 
-        $this->logger->debug(sprintf('Workers: %s', $slaveCount));
-        $this->logger->debug(sprintf('Worker memory limit: %s bytes', $this->workerMemoryLimit));
-        $this->logger->debug(sprintf('Host: %s:%s', $host, $port));
+        $this->logger->debug(sprintf('Workers: %s', $config->workers));
+        $this->logger->debug(sprintf('Worker memory limit: %s bytes', $config->worker_memory_limit));
+        $this->logger->debug(sprintf('Host: %s:%s', $config->host, $config->port));
         $this->logger->debug(sprintf('Timeout: %s seconds', $this->slavePingTimeout()));
     }
 
@@ -168,60 +114,12 @@ class ProcessManager
         }
     }
 
-    /**
-     * @param string $bridge
-     */
-    public function setBridge($bridge)
-    {
-        $this->bridge = $bridge;
-    }
-
-    /**
-     * @return string
-     */
-    public function getBridge()
-    {
-        return $this->bridge;
-    }
-
-    /**
-     * @param string $appBootstrap
-     */
-    public function setAppBootstrap($appBootstrap)
-    {
-        $this->appBootstrap = $appBootstrap;
-    }
-
-    /**
-     * @return string
-     */
-    public function getAppBootstrap()
-    {
-        return $this->appBootstrap;
-    }
-
-    /**
-     * @param string|null $appenv
-     */
-    public function setAppEnv($appenv)
-    {
-        $this->appenv = $appenv;
-    }
-
-    /**
-     * @return string
-     */
-    public function getAppEnv()
-    {
-        return $this->appenv;
-    }
-
     public function run()
     {
         $this->loop       = Factory::create();
         $this->controller = new Server($this->loop);
         $this->controller->on('connection', [$this, 'onSlaveConnection']);
-        $this->controller->listen($this->port, $this->host);
+        $this->controller->listen($this->config->port, $this->config->host);
 
         $http = new \PHPPM\Server($this->controller);
         /** @noinspection PhpUnusedParameterInspection */
@@ -232,7 +130,7 @@ class ProcessManager
 
         $this->web = new Server($this->loop);
         $this->web->on('connection', [$this, 'onWeb']);
-        $this->web->listen($this->port + 1, $this->host);
+        $this->web->listen($this->config->port + 1, $this->config->host);
 
         $this->runSlaves();
 
@@ -271,11 +169,11 @@ class ProcessManager
      */
     private function slavePingTimeout()
     {
-        if ($this->requestTimeout === null) {
+        if ($this->config->request_timeout === null) {
             return 30 + ProcessSlave::PING_TIMEOUT * 3;
         }
 
-        return $this->requestTimeout;
+        return $this->config->request_timeout;
     }
 
     /**
@@ -311,7 +209,7 @@ class ProcessManager
         /** @var Slave $slave */
         $slave    = $slaves[$slaveId];
         $port     = $slave->getPort();
-        $client   = stream_socket_client(sprintf('tcp://%s:%s', $this->host, $port));
+        $client   = stream_socket_client(sprintf('tcp://%s:%s', $this->config->host, $port));
         $redirect = new Stream($client, $this->loop);
 
         $incoming->on('close', function () use ($redirect) {
@@ -348,7 +246,6 @@ class ProcessManager
 
         $this->index++;
         if ($count >= $this->index) {
-            //end
             $this->index = 0;
         }
 
@@ -395,10 +292,10 @@ class ProcessManager
     public function clusterStatusAsJson()
     {
         $data['pid']                 = getmypid();
-        $data['host']                = $this->host;
-        $data['port']                = $this->port;
+        $data['host']                = $this->config->host;
+        $data['port']                = $this->config->port;
         $data['shutdown_lock']       = $this->shutdownLock;
-        $data['waited_slaves']       = $this->waitSlaves;
+        $data['waited_slaves']       = $this->waitedSlaves;
         $data['slaves_count']        = count($this->slaves);
         $data['allow_new_instances'] = $this->allowNewInstances;
 
@@ -408,11 +305,6 @@ class ProcessManager
         }, $this->slaves));
 
         return json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-    }
-
-    public function setWorkingDirectory($workingDir)
-    {
-        $this->workingDirectory = $workingDir;
     }
 
     /**
@@ -507,12 +399,12 @@ class ProcessManager
      */
     public function checkSlaves()
     {
-        if (!$this->running || !$this->allowNewInstances || $this->waitSlaves > 0) {
+        if (!$this->running || !$this->allowNewInstances || $this->waitedSlaves > 0) {
             return;
         }
 
         $slavesCount = count($this->slaves);
-        if ($this->slavesCount > $slavesCount) {
+        if ($this->config->workers > $slavesCount) {
             $this->logger->warning('Slaves count less then needed.');
 
             $this->runSlaves();
@@ -538,12 +430,12 @@ class ProcessManager
     {
         $this->logger->debug('Fork new slave.');
 
-        $this->waitSlaves++;
+        $this->waitedSlaves++;
         $pid = pcntl_fork();
         if (!$pid) {
             try {
-                chdir($this->workingDirectory);
-                new ProcessSlave($this->host, $this->port, $this->getBridge(), $this->appBootstrap, $this->appenv, $this->logFile);
+                chdir($this->config->working_directory);
+                new ProcessSlave($this->config);
             } catch (Exception $e) {
                 foreach ($this->slaves as $idx => $slave) {
                     if ($slave->equalsByPid(getmypid())) {

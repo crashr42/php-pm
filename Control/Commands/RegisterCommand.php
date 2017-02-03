@@ -18,9 +18,9 @@ class RegisterCommand extends ControlCommand
 {
     public function handle($data, Connection $connection, ProcessManager $manager)
     {
-        $manager->waitSlaves--;
+        $manager->waitedSlaves--;
 
-        if (count($manager->getSlaves()) === $manager->slavesCount) {
+        if (count($manager->getSlaves()) === $manager->config->workers) {
             $manager->logger->warning('All slaves already spawned. Reject slave.');
 
             $connection->end();
@@ -31,7 +31,7 @@ class RegisterCommand extends ControlCommand
         $newSlave = new Slave();
         $newSlave->setPid($data['pid']);
         $newSlave->setPort($data['port']);
-        $newSlave->setHost($manager->host);
+        $newSlave->setHost($manager->config->host);
         $newSlave->setConnection($connection);
         $newSlave->setPingAt(date('Y-m-d H:i:s O'));
         $newSlave->setBornAt(date('Y-m-d H:i:s O'));

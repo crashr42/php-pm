@@ -7,12 +7,12 @@ use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\ErrorLogHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
+use PHPPM\Config\ConfigReader;
 use React\EventLoop\Factory;
 use React\Http\Request;
 use React\Http\Response;
 use React\Socket\Connection;
 use React\Socket\ConnectionException;
-use React\Socket\Server;
 
 class ProcessSlave
 {
@@ -37,19 +37,9 @@ class ProcessSlave
     protected $connection;
 
     /**
-     * @var string
-     */
-    protected $bridgeName;
-
-    /**
      * @var Bridges\BridgeInterface
      */
     protected $bridge;
-
-    /**
-     * @var string|null
-     */
-    protected $appenv;
 
     /**
      * @var bool
@@ -72,16 +62,6 @@ class ProcessSlave
     protected $waitFailChecked = 0;
 
     /**
-     * @var string
-     */
-    private $ppmHost;
-
-    /**
-     * @var int
-     */
-    private $ppmPort;
-
-    /**
      * @var int
      */
     private $port;
@@ -90,40 +70,34 @@ class ProcessSlave
      * @var Logger
      */
     private $logger;
+    /**
+     * @var ConfigReader
+     */
+    private $config;
 
     /**
      * Create slave process.
      *
-     * @param string $ppmHost
-     * @param int $ppmPort
-     * @param null|string $bridgeName
-     * @param string $appBootstrap
-     * @param string $appenv
-     * @param string $ppmLogFile
-     *
-     * @throws \Exception
-     * @throws \InvalidArgumentException
+     * @param ConfigReader $config
      */
-    public function __construct($ppmHost, $ppmPort, $bridgeName = null, $appBootstrap, $appenv, $ppmLogFile)
+    public function __construct(ConfigReader $config)
     {
-        $this->ppmHost    = $ppmHost;
-        $this->ppmPort    = $ppmPort;
-        $this->bridgeName = $bridgeName;
+        $this->config = $config;
 
         $lineFormatter = new LineFormatter('[%datetime%] %channel%.%level_name%: %message% %context% %extra%', null, false, true);
 
         $this->logger = new Logger(static::class);
-        $this->logger->pushHandler(new StreamHandler($ppmLogFile));
+        $this->logger->pushHandler(new StreamHandler($config->log_file));
         $this->logger->pushHandler((new ErrorLogHandler())->setFormatter($lineFormatter));
 
-        $this->bootstrap($appBootstrap, $appenv);
+        $this->bootstrap($config->bootstrap, $config->appenv);
         $this->connectToMaster();
         $this->loop->run();
     }
 
     protected function shutdown()
     {
-        $this->logger->info(sprintf("Shutting slave process down (http://%s:%s)\n", $this->ppmHost, $this->port));
+        $this->logger->info(sprintf("Shutting slave process down (http://%s:%s)\n", $this->config->host, $this->config->port));
         $this->bye();
         exit;
     }
@@ -133,11 +107,11 @@ class ProcessSlave
      */
     protected function getBridge()
     {
-        if (null === $this->bridge && $this->bridgeName) {
-            if (true === class_exists($this->bridgeName)) {
-                $bridgeClass = $this->bridgeName;
+        if (null === $this->bridge && $this->config->bridge) {
+            if (true === class_exists($this->config->bridge)) {
+                $bridgeClass = $this->config->bridge;
             } else {
-                $bridgeClass = sprintf('PHPPM\Bridges\\%s', ucfirst($this->bridgeName));
+                $bridgeClass = sprintf('PHPPM\Bridges\\%s', ucfirst($this->config->bridge));
             }
 
             $this->bridge = new $bridgeClass;
@@ -158,7 +132,7 @@ class ProcessSlave
         $bornAt = date('Y-m-d H:i:s O');
 
         $this->loop       = Factory::create();
-        $this->client     = stream_socket_client(sprintf('tcp://%s:%s', $this->ppmHost, $this->ppmPort));
+        $this->client     = stream_socket_client(sprintf('tcp://%s:%s', $this->config->host, $this->config->port));
         $this->connection = new Connection($this->client, $this->loop);
 
         /** @noinspection PhpParamsInspection */
@@ -205,17 +179,17 @@ class ProcessSlave
             $this->shutdown();
         }, $this));
 
-        $socket = new Server($this->loop);
+        $socket = new \React\Socket\Server($this->loop);
         $http   = new \PHPPM\Server($socket);
         $http->on('request', [$this, 'onRequest']);
 
-        $port    = $this->ppmPort;
+        $port    = $this->config->port;
         $maxPort = $port + self::MAX_WORKERS;
         while ($port < $maxPort) {
             try {
-                $socket->listen($port, $this->ppmHost);
+                $socket->listen($port, $this->config->host);
                 $this->port = $port;
-                $this->logger->info(sprintf("Listen worker on uri http://%s:%s\n", $this->ppmHost, $port));
+                $this->logger->info(sprintf("Listen worker on uri http://%s:%s\n", $this->config->host, $port));
                 cli_set_process_title(sprintf('react slave on port %s', $port));
                 break;
             } catch (ConnectionException $e) {
