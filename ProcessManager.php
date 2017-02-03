@@ -4,15 +4,14 @@ namespace PHPPM;
 
 use Closure;
 use Exception;
+use PHPPM\Channels\BalancerControlChannel;
+use PHPPM\Channels\MasterControlChannel;
 use PHPPM\Config\ConfigReader;
 use PHPPM\Control\Commands\ShutdownCommand;
 use PHPPM\Control\ControlCommand;
 use React\EventLoop\Factory;
-use React\Http\Request;
-use React\Http\Response;
 use React\Socket\Connection;
 use React\Socket\Server;
-use React\Stream\Stream;
 
 class ProcessManager
 {
@@ -95,21 +94,10 @@ class ProcessManager
 
     public function run()
     {
-        $this->loop       = Factory::create();
-        $this->controller = new Server($this->loop);
-        $this->controller->on('connection', [$this, 'onSlaveConnection']);
-        $this->controller->listen($this->config->port, $this->config->host);
+        $this->loop = Factory::create();
 
-        $http = new \PHPPM\Server($this->controller);
-        /** @noinspection PhpUnusedParameterInspection */
-        $http->on('request', Closure::bind(function (Request $request, Response $response) {
-            $response->writeHead();
-            $response->end($this->clusterStatusAsJson());
-        }, $this));
-
-        $this->web = new Server($this->loop);
-        $this->web->on('connection', [$this, 'onWeb']);
-        $this->web->listen($this->config->port + 1, $this->config->host);
+        new MasterControlChannel($this, $this->loop);
+        new BalancerControlChannel($this, $this->loop);
 
         $this->runSlaves();
 
@@ -176,50 +164,9 @@ class ProcessManager
     }
 
     /**
-     * @param Connection $incoming
-     */
-    public function onWeb(Connection $incoming)
-    {
-        do {
-            $slaves  = array_values($this->activeSlaves());
-            $slaveId = $this->getNextSlave();
-        } while (!array_key_exists($slaveId, $slaves));
-
-        /** @var Slave $slave */
-        $slave    = $slaves[$slaveId];
-        $port     = $slave->getPort();
-        $client   = stream_socket_client(sprintf('tcp://%s:%s', $this->config->host, $port));
-        $redirect = new Stream($client, $this->loop);
-
-        $incoming->on('close', function () use ($redirect) {
-            $redirect->end();
-        });
-
-        $incoming->on('error', function () use ($redirect) {
-            $redirect->end();
-        });
-
-        $incoming->on('data', function ($data) use ($redirect) {
-            $redirect->write($data);
-        });
-
-        $redirect->on('close', function () use ($incoming) {
-            $incoming->end();
-        });
-
-        $redirect->on('error', function () use ($incoming) {
-            $incoming->end();
-        });
-
-        $redirect->on('data', function ($data) use ($incoming) {
-            $incoming->write($data);
-        });
-    }
-
-    /**
      * @return integer
      */
-    protected function getNextSlave()
+    public function getNextSlave()
     {
         $count = count($this->activeSlaves());
 
@@ -229,20 +176,6 @@ class ProcessManager
         }
 
         return $this->index;
-    }
-
-    public function onSlaveConnection(Connection $conn)
-    {
-        $conn->on('data', Closure::bind(function ($data) use ($conn) {
-            $this->processControlCommand($data, $conn);
-        }, $this));
-        $conn->on('close', Closure::bind(function () use ($conn) {
-            foreach ($this->slaves as $idx => $slave) {
-                if ($slave->equalsByConnection($conn)) {
-                    $this->removeSlave($idx);
-                }
-            }
-        }, $this));
     }
 
     /**
@@ -388,7 +321,7 @@ class ProcessManager
      * Returning active slaves.
      * @return array
      */
-    protected function activeSlaves()
+    public function activeSlaves()
     {
         return array_filter($this->slaves, function ($slave) {
             /** @var Slave $slave */
