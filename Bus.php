@@ -36,10 +36,13 @@ class Bus extends EventEmitter
         $this->manager    = $manager;
     }
 
+    /**
+     * Handle commands.
+     */
     public function run()
     {
         $this->connection->on('data', function ($raw) {
-            $this->manager->logger->debug($raw);
+            $this->manager->getLogger()->debug($raw);
 
             $rawCommands = explode("\n", $raw);
             foreach ($rawCommands as $rawCommand) {
@@ -47,10 +50,10 @@ class Bus extends EventEmitter
                     continue;
                 }
 
-                $this->manager->logger->debug("Raw command: {$rawCommand}");
+                $this->manager->getLogger()->debug("Raw command: {$rawCommand}");
 
                 if ($command = ControlCommand::find($rawCommand)) {
-                    $this->manager->logger->debug('Run command: '.get_class($command));
+                    $this->manager->getLogger()->debug('Run command: '.get_class($command));
 
                     $this->emit(get_class($command), [$command, $this->connection, $this->manager]);
                 }
@@ -58,13 +61,22 @@ class Bus extends EventEmitter
         });
     }
 
+    /**
+     * Send command.
+     *
+     * @param string $cmd
+     * @return bool|void
+     */
     public function send($cmd)
     {
-        $this->manager->logger->debug("Send: {$cmd}");
+        $this->manager->getLogger()->debug("Send: {$cmd}");
 
         return $this->connection->write(sprintf("%s\n", $cmd));
     }
 
+    /**
+     * Stop handle command and close connections.
+     */
     public function end()
     {
         $this->connection->close();

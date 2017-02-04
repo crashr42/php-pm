@@ -109,7 +109,7 @@ class ProcessManager
 
         set_error_handler(function ($errno, $errstr, $errfile, $errline) {
             $this->logger->crit(sprintf('"[%s] %s" in %s:%s', $errno, $errstr, $errfile, $errline), func_get_args());
-        }, E_STRICT | E_ERROR) ;
+        }) ;
 
         $this->logger->info('Config: '.json_encode($config->getArrayCopy(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }

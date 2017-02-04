@@ -64,21 +64,30 @@ class ProcessSlave
     /**
      * @var int
      */
-    private $port;
+    protected $port;
 
     /**
      * @var Logger
      */
-    public $logger;
+    protected $logger;
+
     /**
      * @var ConfigReader
      */
-    private $config;
+    protected $config;
 
     /**
      * @var Bus
      */
-    private $bus;
+    protected $bus;
+
+    /**
+     * @return \Monolog\Logger|Logger
+     */
+    public function getLogger()
+    {
+        return $this->logger;
+    }
 
     /**
      * Create slave process.
@@ -94,13 +103,6 @@ class ProcessSlave
         $this->bootstrap($config->bootstrap, $config->appenv);
         $this->connectToMaster();
         $this->loop->run();
-    }
-
-    protected function shutdown()
-    {
-        $this->logger->info(sprintf('Shutting slave process down (http://%s:%s)', $this->config->host, $this->port));
-        $this->bye();
-        exit;
     }
 
     /**
@@ -134,6 +136,9 @@ class ProcessSlave
         }
     }
 
+    /**
+     * Connect to master process, start http interface and accept connections.
+     */
     public function connectToMaster()
     {
         $bornAt = date('Y-m-d H:i:s O');
@@ -205,6 +210,13 @@ class ProcessSlave
         $this->bus->send((new RegisterCommand())->serialize(getmypid(), $port));
     }
 
+    /**
+     * Handle http request.
+     *
+     * @param Request $request
+     * @param Response $response
+     * @throws \Exception
+     */
     public function onRequest(Request $request, Response $response)
     {
         if ($request->getPath() === $this->config->check_url) {
@@ -228,12 +240,18 @@ class ProcessSlave
         $this->processing = false;
     }
 
-    public function bye()
+    /**
+     * Shutdown worker.
+     */
+    protected function shutdown()
     {
+        $this->logger->info(sprintf('Shutting slave process down (http://%s:%s)', $this->config->host, $this->port));
         if ($this->connection->isWritable()) {
             $this->bus->send((new UnregisterCommand())->serialize(getmypid()));
             $this->connection->close();
         }
         $this->loop->stop();
+
+        exit;
     }
 }
