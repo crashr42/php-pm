@@ -12,7 +12,7 @@ namespace PHPPM;
 use Carbon\Carbon;
 use React\Socket\Connection;
 
-class Slave
+class Worker
 {
     const STATUS_OK       = 'ok';
     const STATUS_SHUTDOWN = 'shutdown';
@@ -211,13 +211,13 @@ class Slave
     }
 
     /**
-     * @param Slave $otherSlave
+     * @param Worker $otherWorker
      *
      * @return bool
      */
-    public function equals(Slave $otherSlave)
+    public function equals(Worker $otherWorker)
     {
-        return $this->getPort() === $otherSlave->getPort();
+        return $this->getPort() === $otherWorker->getPort();
     }
 
     /**

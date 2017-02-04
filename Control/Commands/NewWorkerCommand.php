@@ -13,15 +13,15 @@ use PHPPM\Control\ControlCommand;
 use PHPPM\ProcessManager;
 use React\Socket\Connection;
 
-class NewSlaveCommand extends ControlCommand
+class NewWorkerCommand extends ControlCommand
 {
     public function handleOnMaster(Connection $connection, ProcessManager $manager)
     {
-        $manager->forkSlave();
+        $manager->forkWorker();
     }
 
     public function serialize()
     {
-        return json_encode(['cmd' => 'newSlave', 'port' => func_get_arg(0)]);
+        return json_encode(['cmd' => 'newWorker', 'port' => func_get_arg(0)]);
     }
 }

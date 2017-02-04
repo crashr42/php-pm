@@ -19,12 +19,13 @@ namespace PHPPM\Config;
  * @property string host
  * @property string bootstrap
  * @property string log_file
+ * @property string log_level
  * @property integer request_timeout
  * @property string working_directory
  * @property string appenv
- * @property integer slaves_control_port
- * @property integer slaves_min_port
- * @property integer slaves_max_port
+ * @property integer $workers_control_port
+ * @property integer $workers_min_port
+ * @property integer $workers_max_port
  * @property string check_url
  */
 class ConfigReader extends \ArrayObject

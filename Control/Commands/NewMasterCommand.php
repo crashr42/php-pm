@@ -12,7 +12,7 @@ namespace PHPPM\Control\Commands;
 use PHPPM\Bus;
 use PHPPM\Control\ControlCommand;
 use PHPPM\ProcessManager;
-use PHPPM\Slave;
+use PHPPM\Worker;
 use React\Socket\Connection;
 
 class NewMasterCommand extends ControlCommand
@@ -35,27 +35,27 @@ class NewMasterCommand extends ControlCommand
 
         $manager->shutdownLock = true;
 
-        $slaves = $manager->slavesCollection()->getSlaves();
+        $workers = $manager->workersCollection()->all();
 
-        $this->gracefulShutdown($bus, $manager, array_shift($slaves), $slaves);
+        $this->gracefulShutdown($bus, $manager, array_shift($workers), $workers);
     }
 
-    private function gracefulShutdown(Bus $bus, ProcessManager $manager, Slave $slave, $slaves)
+    private function gracefulShutdown(Bus $bus, ProcessManager $manager, Worker $worker, $workers)
     {
-        $slave->setStatus(Slave::STATUS_SHUTDOWN);
+        $worker->setStatus(Worker::STATUS_SHUTDOWN);
 
         /** @var Connection $connection */
-        $slave->getConnection()->on('close', function () use ($bus, $manager, $slave, $slaves) {
-            $manager->slavesCollection()->removeSlave($slave);
+        $worker->getConnection()->on('close', function () use ($bus, $manager, $worker, $workers) {
+            $manager->workersCollection()->removeWorker($worker);
 
-            $bus->send((new NewSlaveCommand())->serialize($slave->getPort()));
+            $bus->send((new NewWorkerCommand())->serialize($worker->getPort()));
 
-            $message = sprintf('Shutdown http://%s:%s', $slave->getHost(), $slave->getPort());
+            $message = sprintf('Shutdown http://%s:%s', $worker->getHost(), $worker->getPort());
             $manager->getLogger()->info($message);
             $bus->send((new LogCommand())->serialize($message));
 
-            if (count($slaves) > 0) {
-                $this->gracefulShutdown($bus, $manager, array_shift($slaves), $slaves);
+            if (count($workers) > 0) {
+                $this->gracefulShutdown($bus, $manager, array_shift($workers), $workers);
             } else {
                 $bus->send((new LogCommand())->serialize('Last worker shutdown.'));
                 $bus->send((new PrepareMasterCommand())->serialize());
@@ -67,9 +67,9 @@ class NewMasterCommand extends ControlCommand
                 });
             }
         });
-        $bus->send((new LogCommand())->serialize(sprintf("Try shutdown http://%s:%s\n", $slave->getHost(), $slave->getPort())));
+        $bus->send((new LogCommand())->serialize(sprintf("Try shutdown http://%s:%s\n", $worker->getHost(), $worker->getPort())));
 
-        $slave->getConnection()->write((new ShutdownCommand())->serialize());
+        $worker->getConnection()->write((new ShutdownCommand())->serialize());
     }
 
     public function serialize()

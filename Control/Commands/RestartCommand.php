@@ -27,9 +27,9 @@ class RestartCommand extends ControlCommand
 
         $manager->shutdownLock = true;
 
-        $slaves = $manager->slavesCollection()->getSlaves();
+        $workers = $manager->workersCollection()->all();
 
-        $manager->gracefulShutdown(array_pop($slaves), $slaves, $connection);
+        $manager->gracefulShutdown(array_pop($workers), $workers, $connection);
     }
 
     public function serialize()

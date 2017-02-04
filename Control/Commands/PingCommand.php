@@ -4,7 +4,7 @@ namespace PHPPM\Control\Commands;
 
 use PHPPM\Control\ControlCommand;
 use PHPPM\ProcessManager;
-use PHPPM\Slave;
+use PHPPM\Worker;
 use React\Socket\Connection;
 
 /**
@@ -17,28 +17,28 @@ class PingCommand extends ControlCommand
 {
     public function handleOnMaster(Connection $connection, ProcessManager $manager)
     {
-        $slaves = $manager->slavesCollection();
+        $workers = $manager->workersCollection();
 
-        foreach ($slaves->getSlaves() as $idx => &$slave) {
+        foreach ($workers->all() as $worker) {
             $status = $this->data['status'];
 
-            if ($slave->equalsByPid($status['pid'])) {
-                $slave->setMemory($status['memory']);
-                $slave->setBornAt($status['born_at']);
-                $slave->setPingAt($status['ping_at']);
+            if ($worker->equalsByPid($status['pid'])) {
+                $worker->setMemory($status['memory']);
+                $worker->setBornAt($status['born_at']);
+                $worker->setPingAt($status['ping_at']);
 
-                $cpuUsage = (int)shell_exec("ps -p {$slave->getPid()} -o %cpu | tail -n 1");
-                $slave->setCpuUsage($cpuUsage);
+                $cpuUsage = (int)shell_exec("ps -p {$worker->getPid()} -o %cpu | tail -n 1");
+                $worker->setCpuUsage($cpuUsage);
 
-                if ($manager->hasShutdownSlaves()) {
+                if ($manager->hasShutdownWorkers()) {
                     break;
                 }
-                if ($slave->getMemory() > $manager->getConfig()->worker_memory_limit) {
+                if ($worker->getMemory() > $manager->getConfig()->worker_memory_limit) {
                     $manager->getLogger()->warning(sprintf(
-                        "Worker memory %s of limit %s exceeded.\n", $slave->getMemory(), $manager->getConfig()->worker_memory_limit
+                        "Worker memory %s of limit %s exceeded.\n", $worker->getMemory(), $manager->getConfig()->worker_memory_limit
                     ));
-                    $slave->setStatus(Slave::STATUS_SHUTDOWN);
-                    $slave->getConnection()->write(json_encode(['cmd' => 'shutdown']));
+                    $worker->setStatus(Worker::STATUS_SHUTDOWN);
+                    $worker->getConnection()->write(json_encode(['cmd' => 'shutdown']));
 
                     break;
                 }
@@ -46,8 +46,8 @@ class PingCommand extends ControlCommand
                 $cpuLimit = 10;
                 if ($cpuUsage > $cpuLimit) {
                     $manager->getLogger()->warning(sprintf("Worker cpu usage %s of limit %s exceeded.\n", $cpuLimit, $cpuUsage));
-                    $slave->setStatus(Slave::STATUS_SHUTDOWN);
-                    $slave->getConnection()->write(json_encode(['cmd' => 'shutdown']));
+                    $worker->setStatus(Worker::STATUS_SHUTDOWN);
+                    $worker->getConnection()->write(json_encode(['cmd' => 'shutdown']));
 
                     break;
                 }

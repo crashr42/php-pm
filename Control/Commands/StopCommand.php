@@ -29,9 +29,9 @@ class StopCommand extends ControlCommand
         $manager->allowNewInstances = false;
         $manager->shutdownLock      = true;
 
-        $slaves = $manager->slavesCollection()->getSlaves();
+        $workers = $manager->workersCollection()->all();
 
-        $manager->gracefulShutdown(array_pop($slaves), $slaves, $connection, Closure::bind(function () use ($manager) {
+        $manager->gracefulShutdown(array_pop($workers), $workers, $connection, Closure::bind(function () use ($manager) {
             $manager->getLogger()->info('Cluster stopped.');
             $manager->getLoop()->stop();
             exit;

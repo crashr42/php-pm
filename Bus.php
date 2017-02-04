@@ -21,14 +21,14 @@ class Bus extends EventEmitter
     private $connection;
 
     /**
-     * @var ProcessManager|ProcessSlave
+     * @var ProcessManager|ProcessWorker
      */
     private $manager;
 
     /**
      * Bus constructor.
      * @param Connection $connection
-     * @param ProcessManager|ProcessSlave $manager
+     * @param ProcessManager|ProcessWorker $manager
      */
     public function __construct(Connection $connection, $manager)
     {

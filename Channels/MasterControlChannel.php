@@ -14,7 +14,7 @@ use Evenement\EventEmitter;
 use PHPPM\Bus;
 use PHPPM\Control\Commands\LogCommand;
 use PHPPM\Control\Commands\NewMasterCommand;
-use PHPPM\Control\Commands\NewSlaveCommand;
+use PHPPM\Control\Commands\NewWorkerCommand;
 use PHPPM\Control\Commands\PingCommand;
 use PHPPM\Control\Commands\PrepareMasterCommand;
 use PHPPM\Control\Commands\RegisterCommand;
@@ -69,7 +69,7 @@ class MasterControlChannel extends EventEmitter
         try {
             $this->runControlBus();
 
-            $this->runSlaveBus();
+            $this->runWorkerBus();
 
             $this->emit('done');
         } catch (ConnectionException $e) {
@@ -78,7 +78,7 @@ class MasterControlChannel extends EventEmitter
             $connection = stream_socket_client(sprintf('tcp://%s:%s', $this->manager->getConfig()->host, $this->manager->getConfig()->port));
             $connection = new Connection($connection, $this->loop);
             $bus        = new Bus($connection, $this->manager);
-            $bus->on(NewSlaveCommand::class, $this->defaultHandler);
+            $bus->on(NewWorkerCommand::class, $this->defaultHandler);
             $bus->on(PrepareMasterCommand::class, function () {
                 $this->prepareMaster = true;
             });
@@ -99,13 +99,13 @@ class MasterControlChannel extends EventEmitter
                 }
             });
 
-            $this->on('slave_bus', function () use ($bus) {
+            $this->on('workers_bus', function () use ($bus) {
                 $bus->run();
 
                 $bus->send((new NewMasterCommand())->serialize());
             });
 
-            $this->runSlaveBus();
+            $this->runWorkerBus();
         }
     }
 
@@ -131,36 +131,36 @@ class MasterControlChannel extends EventEmitter
         });
     }
 
-    private function runSlaveBus()
+    private function runWorkerBus()
     {
-        $slaveBus = new Server($this->loop);
-        $slaveBus->on('connection', function (Connection $connection) {
+        $workersBus = new Server($this->loop);
+        $workersBus->on('connection', function (Connection $connection) {
             $bus = new Bus($connection, $this->manager);
             $bus->on(RegisterCommand::class, $this->defaultHandler);
             $bus->on(UnregisterCommand::class, $this->defaultHandler);
             $bus->on(PingCommand::class, $this->defaultHandler);
 
             $connection->on('close', function () use ($connection) {
-                foreach ($this->manager->slavesCollection()->getSlaves() as $slave) {
-                    if ($slave->equalsByConnection($connection)) {
-                        $this->manager->slavesCollection()->removeSlave($slave);
+                foreach ($this->manager->workersCollection()->all() as $worker) {
+                    if ($worker->equalsByConnection($connection)) {
+                        $this->manager->workersCollection()->removeWorker($worker);
                     }
                 }
             });
 
             $bus->run();
         });
-        $this->manager->getConfig()->slaves_control_port = $this->manager->getConfig()->port - 1;
+        $this->manager->getConfig()->workers_control_port = $this->manager->getConfig()->port - 1;
 
         for ($i = 5; $i > 0; $i--) {
             try {
-                $slaveBus->listen($this->manager->getConfig()->slaves_control_port, $this->manager->getConfig()->host);
+                $workersBus->listen($this->manager->getConfig()->workers_control_port, $this->manager->getConfig()->host);
 
-                $this->emit('slave_bus');
+                $this->emit('workers_bus');
 
                 break;
             } catch (ConnectionException $e) {
-                $this->manager->getConfig()->slaves_control_port--;
+                $this->manager->getConfig()->workers_control_port--;
             }
         }
     }

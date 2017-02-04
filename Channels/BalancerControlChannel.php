@@ -10,7 +10,7 @@ namespace PHPPM\Channels;
 
 
 use PHPPM\ProcessManager;
-use PHPPM\Slave;
+use PHPPM\Worker;
 use React\EventLoop\LoopInterface;
 use React\Socket\Connection;
 use React\Socket\Server;
@@ -43,13 +43,13 @@ class BalancerControlChannel
     public function onWeb(Connection $incoming)
     {
         do {
-            $slaves  = array_values($this->manager->slavesCollection()->activeSlaves());
-            $slaveId = $this->manager->slavesCollection()->getNextSlave();
-        } while (!array_key_exists($slaveId, $slaves));
+            $workers  = array_values($this->manager->workersCollection()->activeWorkers());
+            $workerId = $this->manager->workersCollection()->getNextWorker();
+        } while (!array_key_exists($workerId, $workers));
 
-        /** @var Slave $slave */
-        $slave    = $slaves[$slaveId];
-        $port     = $slave->getPort();
+        /** @var Worker $worker */
+        $worker   = $workers[$workerId];
+        $port     = $worker->getPort();
         $client   = stream_socket_client(sprintf('tcp://%s:%s', $this->manager->getConfig()->host, $port));
         $redirect = new Stream($client, $this->loop);
 

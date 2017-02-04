@@ -3,7 +3,7 @@
 namespace PHPPM\Control;
 
 use PHPPM\ProcessManager;
-use PHPPM\ProcessSlave;
+use PHPPM\ProcessWorker;
 use React\Socket\Connection;
 
 /**
@@ -26,7 +26,7 @@ abstract class ControlCommand
 
     }
 
-    public function handleOnSlave(Connection $connection, ProcessSlave $manager)
+    public function handleOnWorker(Connection $connection, ProcessWorker $manager)
     {
 
     }

@@ -16,20 +16,24 @@ use Monolog\Handler\StreamHandler;
 class Logger
 {
     /**
-     * @var \Monolog\Logger
+     * Initialize logger for given class.
+     *
+     * @param string $class
+     * @param string $logFile
+     * @param string $level
+     * @return \Monolog\Logger
      */
-    private static $logger;
-
-    public static function get($class, $logFile)
+    public static function get($class, $logFile, $level = 'debug')
     {
-        if (static::$logger === null) {
-            $lineFormatter = new LineFormatter('[%datetime%] %channel%.%level_name%: %message% %context% %extra%', null, true, true);
+        $lineFormatter = new LineFormatter('[%datetime%] %channel%.%level_name%: %message% %context% %extra%', null, true, true);
 
-            static::$logger = new \Monolog\Logger($class);
-            static::$logger->pushHandler(new StreamHandler($logFile));
-            static::$logger->pushHandler((new ErrorLogHandler())->setFormatter($lineFormatter));
-        }
+        /** @var string|int $level */
+        $level = \Monolog\Logger::toMonologLevel($level);
 
-        return static::$logger;
+        $logger = new \Monolog\Logger($class);
+        $logger->pushHandler(new StreamHandler($logFile, $level));
+        $logger->pushHandler((new ErrorLogHandler(ErrorLogHandler::OPERATING_SYSTEM, $level))->setFormatter($lineFormatter));
+
+        return $logger;
     }
 }

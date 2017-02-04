@@ -11,39 +11,39 @@ namespace PHPPM\Control\Commands;
 
 use PHPPM\Control\ControlCommand;
 use PHPPM\ProcessManager;
-use PHPPM\Slave;
+use PHPPM\Worker;
 use React\Socket\Connection;
 
 class RegisterCommand extends ControlCommand
 {
     public function handleOnMaster(Connection $connection, ProcessManager $manager)
     {
-        $manager->waitedSlaves--;
+        $manager->waitedWorkers--;
 
-        if (count($manager->slavesCollection()) === $manager->getConfig()->workers) {
-            $manager->getLogger()->warning('All slaves already spawned. Reject slave.');
+        if (count($manager->workersCollection()) === $manager->getConfig()->workers) {
+            $manager->getLogger()->warning('All workers already spawned. Reject worker.');
 
             $connection->end();
 
             return;
         }
 
-        $newSlave = new Slave();
-        $newSlave->setPid($this->data['pid']);
-        $newSlave->setPort($this->data['port']);
-        $newSlave->setHost($manager->getConfig()->host);
-        $newSlave->setConnection($connection);
-        $newSlave->setPingAt(date('Y-m-d H:i:s O'));
-        $newSlave->setBornAt(date('Y-m-d H:i:s O'));
+        $newWorker = new Worker();
+        $newWorker->setPid($this->data['pid']);
+        $newWorker->setPort($this->data['port']);
+        $newWorker->setHost($manager->getConfig()->host);
+        $newWorker->setConnection($connection);
+        $newWorker->setPingAt(date('Y-m-d H:i:s O'));
+        $newWorker->setBornAt(date('Y-m-d H:i:s O'));
 
-        $isNew = count(array_filter($manager->slavesCollection()->getSlaves(), function ($slave) use ($newSlave) {
-                /** @var Slave $slave */
-                return $newSlave->equals($slave);
+        $isNew = count(array_filter($manager->workersCollection()->all(), function ($worker) use ($newWorker) {
+                /** @var Worker $worker */
+                return $newWorker->equals($worker);
             })) === 0;
 
         if ($isNew) {
-            $manager->getLogger()->info(sprintf('New slave %s up and ready.', $newSlave->getPort()));
-            $manager->slavesCollection()->addSlave($newSlave);
+            $manager->getLogger()->info(sprintf('New worker %s up and ready.', $newWorker->getPort()));
+            $manager->workersCollection()->addWorker($newWorker);
         }
     }
 

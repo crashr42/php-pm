@@ -16,9 +16,9 @@ use React\Socket\Server;
 class ProcessManager
 {
     /**
-     * @var SlavesCollection
+     * @var WorkersCollection
      */
-    protected $slaves;
+    protected $workers;
 
     /**
      * @var LoopInterface
@@ -36,7 +36,7 @@ class ProcessManager
     protected $web;
 
     /**
-     * Whether the server is up and thus creates new slaves when they die or not.
+     * Whether the server is up and thus creates new workers when they die or not.
      *
      * @var bool
      */
@@ -60,7 +60,7 @@ class ProcessManager
     /**
      * @var int
      */
-    public $waitedSlaves = 0;
+    public $waitedWorkers = 0;
 
     /**
      * @var ConfigReader
@@ -98,14 +98,14 @@ class ProcessManager
      */
     public function __construct(ConfigReader $config)
     {
-        $this->config = $config;
-        $this->config->slaves_min_port = $config->port + 2;
-        $this->config->slaves_max_port = $this->config->slaves_min_port + 90;
-        $this->slaves = new SlavesCollection();
+        $this->config                   = $config;
+        $this->config->workers_min_port = $config->port + 2;
+        $this->config->workers_max_port = $this->config->workers_min_port + 90;
+        $this->workers                  = new WorkersCollection();
 
         cli_set_process_title('react master');
 
-        $this->logger = Logger::get(static::class, $config->log_file);
+        $this->logger = Logger::get(static::class, $config->log_file, $config->log_level);
 
         set_error_handler(function ($errno, $errstr, $errfile, $errline) {
             $this->logger->crit(sprintf('"[%s] %s" in %s:%s', $errno, $errstr, $errfile, $errline), func_get_args());
@@ -115,7 +115,7 @@ class ProcessManager
     }
 
     /**
-     * Run main loop and start slaves.
+     * Run main loop and start workers.
      */
     public function run()
     {
@@ -125,29 +125,29 @@ class ProcessManager
         $mc->on('done', function () {
             new BalancerControlChannel($this, $this->loop);
 
-            $this->runSlaves();
+            $this->runWorkers();
 
             $this->running = true;
 
             /** @noinspection PhpParamsInspection */
             $this->loop->addPeriodicTimer(1, Closure::bind(function () {
-                $this->checkSlaves();
+                $this->checkWorkers();
             }, $this));
 
             /** @noinspection PhpParamsInspection */
             $this->loop->addPeriodicTimer(1, Closure::bind(function () {
-                foreach ($this->slaves->getSlaves() as $slave) {
-                    if ($slave->getPingAt() === null) {
+                foreach ($this->workers->all() as $worker) {
+                    if ($worker->getPingAt() === null) {
                         continue;
                     }
 
-                    if ((time() - strtotime($slave->getPingAt())) > $this->slavePingTimeout()) {
-                        $this->logger->info("Timeout ping from worker at pid {$slave->getPid()}. Killing it ...");
-                        if (posix_kill($slave->getPid(), SIGKILL)) {
-                            $this->logger->warn("Killed worker at pid {$slave->getPid()}.");
-                            $this->removeSlave($slave);
+                    if ((time() - strtotime($worker->getPingAt())) > $this->workerPingTimeout()) {
+                        $this->logger->info("Timeout ping from worker at pid {$worker->getPid()}. Killing it ...");
+                        if (posix_kill($worker->getPid(), SIGKILL)) {
+                            $this->logger->warn("Killed worker at pid {$worker->getPid()}.");
+                            $this->removeWorker($worker);
                         } else {
-                            $this->logger->warn("Can't kill worker at pid {$slave->getPid()}.");
+                            $this->logger->warn("Can't kill worker at pid {$worker->getPid()}.");
                         }
                     }
                 }
@@ -159,23 +159,23 @@ class ProcessManager
     }
 
     /**
-     * Calculate slave ping timeout.
+     * Calculate worker ping timeout.
      *
      * @return int
      */
-    private function slavePingTimeout()
+    private function workerPingTimeout()
     {
         if ($this->config->request_timeout === null) {
-            return 30 + ProcessSlave::PING_TIMEOUT * 3;
+            return 30 + ProcessWorker::PING_TIMEOUT * 3;
         }
 
         return $this->config->request_timeout;
     }
 
     /**
-     * Run slaves one by one.
+     * Run workers one by one.
      */
-    private function runSlaves()
+    private function runWorkers()
     {
         if (!$this->allowNewInstances) {
             return;
@@ -183,51 +183,51 @@ class ProcessManager
 
         $this->allowNewInstances = false;
 
-        $this->forkSlave();
+        $this->forkWorker();
 
         $this->allowNewInstances = true;
     }
 
     /**
-     * Check slaves count and run new slave if count less then needed.
+     * Check workers count and run new worker if count less then needed.
      */
-    public function checkSlaves()
+    public function checkWorkers()
     {
-        if (!$this->running || !$this->allowNewInstances || $this->waitedSlaves > 0 || $this->shutdownLock) {
+        if (!$this->running || !$this->allowNewInstances || $this->waitedWorkers > 0 || $this->shutdownLock) {
             return;
         }
 
-        $slavesCount = count($this->slaves->getSlaves());
-        if ($this->config->workers > $slavesCount) {
-            $this->logger->warning('Slaves count less then needed.');
+        $workersCount = count($this->workers->all());
+        if ($this->config->workers > $workersCount) {
+            $this->logger->warning('Workers count less then needed.');
 
-            $this->runSlaves();
+            $this->runWorkers();
         }
     }
 
     /**
-     * Create new slave instance.
+     * Create new worker instance.
      */
-    public function forkSlave()
+    public function forkWorker()
     {
-        $this->logger->debug('Fork new slave.');
+        $this->logger->debug('Fork new worker.');
 
-        if (count($this->slavesCollection()) === $this->config->workers) {
-            $this->logger->warning('All slaves already spawned. Reject slave.');
+        if (count($this->workersCollection()) === $this->config->workers) {
+            $this->logger->warning('All workers already spawned. Reject worker.');
 
             return;
         }
 
-        $this->waitedSlaves++;
+        $this->waitedWorkers++;
         $pid = pcntl_fork();
         if (!$pid) {
             try {
                 chdir($this->config->working_directory);
-                new ProcessSlave($this->config);
+                new ProcessWorker($this->config);
             } catch (Exception $e) {
-                foreach ($this->slaves->getSlaves() as $slave) {
-                    if ($slave->equalsByPid(getmypid())) {
-                        $this->removeSlave($slave);
+                foreach ($this->workers->all() as $worker) {
+                    if ($worker->equalsByPid(getmypid())) {
+                        $this->removeWorker($worker);
                     }
                 }
                 $this->logger->error($e->getMessage(), $e->getTrace());
@@ -247,38 +247,38 @@ class ProcessManager
         $data['host']                = $this->config->host;
         $data['port']                = $this->config->port;
         $data['shutdown_lock']       = $this->shutdownLock;
-        $data['waited_slaves']       = $this->waitedSlaves;
-        $data['slaves_count']        = count($this->slaves);
+        $data['waited_workers']       = $this->waitedWorkers;
+        $data['workers_count']        = count($this->workers);
         $data['allow_new_instances'] = $this->allowNewInstances;
-        $data['slaves_control_port'] = $this->config->slaves_control_port;
+        $data['workers_control_port'] = $this->config->workers_control_port;
 
-        $data['slaves'] = array_values(array_map(function ($slave) {
-            /** @var Slave $slave */
-            return $slave->asJson();
-        }, $this->slaves->getSlaves()));
+        $data['workers'] = array_values(array_map(function ($workers) {
+            /** @var Worker $workers */
+            return $workers->asJson();
+        }, $this->workers->all()));
 
         return json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
     }
 
     /**
-     * Graceful shutdown slaves.
+     * Graceful shutdown workers.
      *
-     * @param Slave $slave
-     * @param array $slaves
+     * @param Worker $worker
+     * @param array $workers
      * @param Connection $client
      * @param callable|null $callback
      */
-    public function gracefulShutdown(Slave $slave, $slaves, Connection $client, callable $callback = null)
+    public function gracefulShutdown(Worker $worker, $workers, Connection $client, callable $callback = null)
     {
-        $slave->setStatus(Slave::STATUS_SHUTDOWN);
+        $worker->setStatus(Worker::STATUS_SHUTDOWN);
 
         /** @var Connection $connection */
-        $slave->getConnection()->on('close', function () use ($slave, $slaves, $client, $callback) {
-            $message = sprintf('Shutdown http://%s:%s', $slave->getHost(), $slave->getPort());
+        $worker->getConnection()->on('close', function () use ($worker, $workers, $client, $callback) {
+            $message = sprintf('Shutdown http://%s:%s', $worker->getHost(), $worker->getPort());
             $this->logger->info($message);
             $client->write($message);
-            if (count($slaves) > 0) {
-                $this->gracefulShutdown(array_pop($slaves), $slaves, $client, $callback);
+            if (count($workers) > 0) {
+                $this->gracefulShutdown(array_pop($workers), $workers, $client, $callback);
             } else {
                 $this->shutdownLock = false;
                 if ($callback !== null) {
@@ -288,9 +288,9 @@ class ProcessManager
                 $client->end();
             }
         });
-        $client->write(sprintf('Try shutdown http://%s:%s', $slave->getHost(), $slave->getPort()));
+        $client->write(sprintf('Try shutdown http://%s:%s', $worker->getHost(), $worker->getPort()));
 
-        $slave->getConnection()->write((new ShutdownCommand())->serialize());
+        $worker->getConnection()->write((new ShutdownCommand())->serialize());
     }
 
     /**
@@ -298,23 +298,23 @@ class ProcessManager
      *
      * @return bool
      */
-    public function hasShutdownSlaves()
+    public function hasShutdownWorkers()
     {
-        return $this->slaves->hasShutdownSlaves() || $this->shutdownLock;
+        return $this->workers->hasShutdownWorkers() || $this->shutdownLock;
     }
 
     /**
-     * Remove slave from collection and stop it.
+     * Remove worker from collection and stop it.
      *
-     * @param Slave $slave
+     * @param Worker $worker
      */
-    private function removeSlave(Slave $slave)
+    private function removeWorker(Worker $worker)
     {
-        $this->logger->warning(sprintf('Die slave %s on port %s', $slave->getPid(), $slave->getPort()));
+        $this->logger->warning(sprintf('Die worker %s on port %s', $worker->getPid(), $worker->getPort()));
 
-        $this->slaves->removeSlave($slave);
+        $this->workers->removeWorker($worker);
 
-        $slave->getConnection()->close();
+        $worker->getConnection()->close();
 
         /** @noinspection PhpParamsInspection */
         $this->loop->addTimer(2, Closure::bind(function () {
@@ -323,16 +323,16 @@ class ProcessManager
             }
         }, $this));
 
-        $this->checkSlaves();
+        $this->checkWorkers();
     }
 
     /**
-     * Get slaves collection.
+     * Get workers collection.
      *
-     * @return SlavesCollection
+     * @return WorkersCollection
      */
-    public function slavesCollection()
+    public function workersCollection()
     {
-        return $this->slaves;
+        return $this->workers;
     }
 }

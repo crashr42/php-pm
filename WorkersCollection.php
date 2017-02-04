@@ -9,7 +9,7 @@
 
 namespace PHPPM;
 
-class SlavesCollection implements \Countable
+class WorkersCollection implements \Countable
 {
     /**
      * @var int
@@ -17,57 +17,57 @@ class SlavesCollection implements \Countable
     protected $index = 0;
 
     /**
-     * @var Slave[]
+     * @var Worker[]
      */
-    private $slaves = [];
+    private $workers = [];
 
     /**
-     * Get all slaves.
+     * Get all workers.
      *
-     * @return Slave[]
+     * @return Worker[]
      */
-    public function getSlaves()
+    public function all()
     {
-        return $this->slaves;
+        return $this->workers;
     }
 
     /**
-     * Add new slave.
+     * Add new worker.
      *
-     * @param Slave $slave
+     * @param Worker $worker
      */
-    public function addSlave(Slave $slave)
+    public function addWorker(Worker $worker)
     {
-        $this->slaves[] = $slave;
+        $this->workers[] = $worker;
     }
 
-    public function removeSlave(Slave $slave)
+    public function removeWorker(Worker $worker)
     {
-        foreach ($this->slaves as $idx => $slv) {
-            if ($slv->equals($slave)) {
-                unset($this->slaves[$idx]);
+        foreach ($this->workers as $idx => $slv) {
+            if ($slv->equals($worker)) {
+                unset($this->workers[$idx]);
             }
         }
     }
 
     /**
-     * Returning active slaves.
+     * Returning active workers.
      * @return array
      */
-    public function activeSlaves()
+    public function activeWorkers()
     {
-        return array_filter($this->slaves, function ($slave) {
-            /** @var Slave $slave */
-            return $slave->getStatus() === Slave::STATUS_OK;
+        return array_filter($this->workers, function ($worker) {
+            /** @var Worker $worker */
+            return $worker->getStatus() === Worker::STATUS_OK;
         });
     }
 
     /**
      * @return integer
      */
-    public function getNextSlave()
+    public function getNextWorker()
     {
-        $count = count($this->activeSlaves());
+        $count = count($this->activeWorkers());
 
         $this->index++;
         if ($count >= $this->index) {
@@ -88,7 +88,7 @@ class SlavesCollection implements \Countable
      */
     public function count()
     {
-        return count($this->slaves);
+        return count($this->workers);
     }
 
     /**
@@ -96,11 +96,11 @@ class SlavesCollection implements \Countable
      *
      * @return bool
      */
-    public function hasShutdownSlaves()
+    public function hasShutdownWorkers()
     {
         $hasShutdown = false;
-        foreach ($this->slaves as $slave) {
-            if ($slave->getStatus() === Slave::STATUS_SHUTDOWN) {
+        foreach ($this->workers as $worker) {
+            if ($worker->getStatus() === Worker::STATUS_SHUTDOWN) {
                 $hasShutdown = true;
                 break;
             }

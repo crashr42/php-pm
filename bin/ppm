@@ -39,7 +39,7 @@ $app->add(new HAProxyCommand());
 /** @var \Composer\Autoload\ClassLoader $loader */
 $loader->loadClass(\PHPPM\Control\Commands\LogCommand::class);
 $loader->loadClass(\PHPPM\Control\Commands\NewMasterCommand::class);
-$loader->loadClass(\PHPPM\Control\Commands\NewSlaveCommand::class);
+$loader->loadClass(\PHPPM\Control\Commands\NewWorkerCommand::class);
 $loader->loadClass(\PHPPM\Control\Commands\PingCommand::class);
 $loader->loadClass(\PHPPM\Control\Commands\PrepareMasterCommand::class);
 $loader->loadClass(\PHPPM\Control\Commands\RegisterCommand::class);

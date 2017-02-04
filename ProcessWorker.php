@@ -14,7 +14,7 @@ use React\Http\Response;
 use React\Socket\Connection;
 use React\Socket\ConnectionException;
 
-class ProcessSlave
+class ProcessWorker
 {
     const PING_TIMEOUT              = 5;
     const SHUTDOWN_TIMEOUT          = 1;
@@ -90,7 +90,7 @@ class ProcessSlave
     }
 
     /**
-     * Create slave process.
+     * Create worker process.
      *
      * @param ConfigReader $config
      */
@@ -98,7 +98,7 @@ class ProcessSlave
     {
         $this->config = $config;
 
-        $this->logger = Logger::get(static::class, $config->log_file);
+        $this->logger = Logger::get(static::class, $config->log_file, $config->log_level);
 
         $this->bootstrap($config->bootstrap, $config->appenv);
         $this->connectToMaster();
@@ -106,6 +106,8 @@ class ProcessSlave
     }
 
     /**
+     * Initialize bridge interface for start application.
+     *
      * @return Bridges\BridgeInterface
      */
     protected function getBridge()
@@ -145,7 +147,7 @@ class ProcessSlave
 
         $this->loop = Factory::create();
 
-        $this->client     = stream_socket_client(sprintf('tcp://%s:%s', $this->config->host, $this->config->slaves_control_port));
+        $this->client     = stream_socket_client(sprintf('tcp://%s:%s', $this->config->host, $this->config->workers_control_port));
         $this->connection = new Connection($this->client, $this->loop);
         $this->bus        = new Bus($this->connection, $this);
         $this->bus->on(ShutdownCommand::class, function () {
@@ -194,13 +196,13 @@ class ProcessSlave
         $http   = new \PHPPM\Server($socket);
         $http->on('request', [$this, 'onRequest']);
 
-        $port = $this->config->slaves_min_port;
-        while ($port < $this->config->slaves_max_port) {
+        $port = $this->config->workers_min_port;
+        while ($port < $this->config->workers_max_port) {
             try {
                 $socket->listen($port, $this->config->host);
                 $this->port = $port;
                 $this->logger->info(sprintf('Listen worker on uri http://%s:%s', $this->config->host, $port));
-                cli_set_process_title(sprintf('react slave on port %s', $port));
+                cli_set_process_title(sprintf('react worker on port %s', $port));
                 break;
             } catch (ConnectionException $e) {
                 $port++;
@@ -245,7 +247,7 @@ class ProcessSlave
      */
     protected function shutdown()
     {
-        $this->logger->info(sprintf('Shutting slave process down (http://%s:%s)', $this->config->host, $this->port));
+        $this->logger->info(sprintf('Shutting worker process down (http://%s:%s)', $this->config->host, $this->port));
         if ($this->connection->isWritable()) {
             $this->bus->send((new UnregisterCommand())->serialize(getmypid()));
             $this->connection->close();
