@@ -181,7 +181,7 @@ class ProcessWorker
                     $this->logger->info(sprintf('Shutdown pid %s', getmypid()));
                     $this->shutdown();
                 } else {
-                    $this->logger->info(sprintf('Wait balancer checks and requests complete [pid: %s]', getmypid()));
+                    $this->logger->debug(sprintf('Wait balancer checks and requests complete [pid: %s]', getmypid()));
                 }
 
                 $this->waitFailChecked++;
