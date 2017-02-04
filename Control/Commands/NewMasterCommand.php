@@ -46,6 +46,16 @@ class NewMasterCommand extends ControlCommand
 
         /** @var Connection $connection */
         $worker->getConnection()->on('close', function () use ($bus, $manager, $worker, $workers) {
+            if ($bus->isDie()) {
+                $manager->shutdownLock = false;
+
+                $manager->getLogger()->error('New master connection is die. Revert current master state.');
+
+                $bus->end();
+
+                return;
+            }
+
             $manager->workersCollection()->removeWorker($worker);
 
             $bus->send((new NewWorkerCommand())->serialize($worker->getPort()));

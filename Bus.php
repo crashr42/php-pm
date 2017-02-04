@@ -81,4 +81,24 @@ class Bus extends EventEmitter
     {
         $this->connection->close();
     }
+
+    /**
+     * Check connection is alive.
+     *
+     * @return bool
+     */
+    public function isAlive()
+    {
+        return $this->connection->isWritable();
+    }
+
+    /**
+     * Check bus is die.
+     *
+     * @return bool
+     */
+    public function isDie()
+    {
+        return !$this->isAlive();
+    }
 }

@@ -73,7 +73,7 @@ class MasterControlChannel extends EventEmitter
 
             $this->emit('done');
         } catch (ConnectionException $e) {
-            $this->manager->getLogger()->info('Another master already running. Restart it and start current.');
+            $this->manager->getLogger()->info('Another master already running. Restart it and start new master.');
 
             $connection = stream_socket_client(sprintf('tcp://%s:%s', $this->manager->getConfig()->host, $this->manager->getConfig()->port));
             $connection = new Connection($connection, $this->loop);
