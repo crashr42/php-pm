@@ -34,4 +34,19 @@ $app->add(new StatusCommand());
 $app->add(new RestartCommand());
 $app->add(new StopCommand());
 $app->add(new HAProxyCommand());
+
+// preload all classes for symlink deploy support
+/** @var \Composer\Autoload\ClassLoader $loader */
+$loader->loadClass(\PHPPM\Control\Commands\LogCommand::class);
+$loader->loadClass(\PHPPM\Control\Commands\NewMasterCommand::class);
+$loader->loadClass(\PHPPM\Control\Commands\NewSlaveCommand::class);
+$loader->loadClass(\PHPPM\Control\Commands\PingCommand::class);
+$loader->loadClass(\PHPPM\Control\Commands\PrepareMasterCommand::class);
+$loader->loadClass(\PHPPM\Control\Commands\RegisterCommand::class);
+$loader->loadClass(\PHPPM\Control\Commands\RestartCommand::class);
+$loader->loadClass(\PHPPM\Control\Commands\ShutdownCommand::class);
+$loader->loadClass(\PHPPM\Control\Commands\StatusCommand::class);
+$loader->loadClass(\PHPPM\Control\Commands\StopCommand::class);
+$loader->loadClass(\PHPPM\Control\Commands\UnregisterCommand::class);
+
 $app->run();
