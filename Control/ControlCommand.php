@@ -3,7 +3,6 @@
 namespace PHPPM\Control;
 
 use PHPPM\ProcessManager;
-use PHPPM\ProcessWorker;
 use React\Socket\Connection;
 
 /**
@@ -21,15 +20,13 @@ abstract class ControlCommand
         $this->data = $data;
     }
 
-    public function handleOnMaster(Connection $connection, ProcessManager $manager)
-    {
-
-    }
-
-    public function handleOnWorker(Connection $connection, ProcessWorker $manager)
-    {
-
-    }
+    /**
+     * Handle command with master process.
+     *
+     * @param Connection $connection
+     * @param ProcessManager $manager
+     */
+    public abstract function handle(Connection $connection, ProcessManager $manager);
 
     public abstract function serialize();
 

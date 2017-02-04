@@ -15,7 +15,7 @@ use React\Socket\Connection;
  */
 class PingCommand extends ControlCommand
 {
-    public function handleOnMaster(Connection $connection, ProcessManager $manager)
+    public function handle(Connection $connection, ProcessManager $manager)
     {
         $workers = $manager->workersCollection();
 

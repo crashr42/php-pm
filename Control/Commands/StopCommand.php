@@ -16,7 +16,7 @@ use React\Socket\Connection;
 
 class StopCommand extends ControlCommand
 {
-    public function handleOnMaster(Connection $connection, ProcessManager $manager)
+    public function handle(Connection $connection, ProcessManager $manager)
     {
         if ($manager->shutdownLock) {
             $manager->getLogger()->warning('Cluster stop in progress ...');

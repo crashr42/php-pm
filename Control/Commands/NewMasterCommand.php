@@ -21,7 +21,7 @@ class NewMasterCommand extends ControlCommand
      * @param Connection $connection
      * @param ProcessManager $manager
      */
-    public function handleOnMaster(Connection $connection, ProcessManager $manager)
+    public function handle(Connection $connection, ProcessManager $manager)
     {
         $bus = new Bus($connection, $manager);
 

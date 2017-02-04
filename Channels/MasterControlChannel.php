@@ -60,7 +60,7 @@ class MasterControlChannel extends EventEmitter
         $this->loop    = $loop;
 
         $this->defaultHandler = function (ControlCommand $command, Connection $connection, ProcessManager $manager) {
-            $command->handleOnMaster($connection, $manager);
+            $command->handle($connection, $manager);
         };
     }
 

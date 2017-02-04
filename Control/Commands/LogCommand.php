@@ -15,7 +15,7 @@ use React\Socket\Connection;
 
 class LogCommand extends ControlCommand
 {
-    public function handleOnMaster(Connection $connection, ProcessManager $manager)
+    public function handle(Connection $connection, ProcessManager $manager)
     {
         $manager->getLogger()->debug($this->data['message']);
     }

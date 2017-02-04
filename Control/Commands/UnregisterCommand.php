@@ -15,7 +15,7 @@ use React\Socket\Connection;
 
 class UnregisterCommand extends ControlCommand
 {
-    public function handleOnMaster(Connection $connection, ProcessManager $manager)
+    public function handle(Connection $connection, ProcessManager $manager)
     {
         $pid = $this->data['pid'];
         $manager->getLogger()->warning(sprintf("Worker died. (pid %d)\n", $pid));

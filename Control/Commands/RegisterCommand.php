@@ -16,7 +16,7 @@ use React\Socket\Connection;
 
 class RegisterCommand extends ControlCommand
 {
-    public function handleOnMaster(Connection $connection, ProcessManager $manager)
+    public function handle(Connection $connection, ProcessManager $manager)
     {
         $manager->waitedWorkers--;
 

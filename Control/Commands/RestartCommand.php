@@ -15,7 +15,7 @@ use React\Socket\Connection;
 
 class RestartCommand extends ControlCommand
 {
-    public function handleOnMaster(Connection $connection, ProcessManager $manager)
+    public function handle(Connection $connection, ProcessManager $manager)
     {
         if ($manager->shutdownLock) {
             $manager->getLogger()->warning('Cluster shutdown already in progress.');
