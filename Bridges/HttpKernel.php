@@ -2,6 +2,7 @@
 
 namespace PHPPM\Bridges;
 
+use Exception;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\Request as LumenRequest;
 use PHPPM\Bootstraps\BootstrapInterface;
@@ -79,7 +80,7 @@ class HttpKernel implements BridgeInterface
             if (strlen($content) >= $contentLength) {
                 try {
                     $syRequest = self::mapRequest($request, $content);
-                } catch (\Exception $exception) {
+                } catch (Exception $exception) {
                     $response->writeHead(500);
                     $response->write($exception->getMessage());
                     $response->end();
@@ -89,7 +90,7 @@ class HttpKernel implements BridgeInterface
 
                 try {
                     $syResponse = $this->application->handle($syRequest);
-                } catch (\Exception $exception) {
+                } catch (Exception $exception) {
                     $response->writeHead(500);
                     $response->write($exception->getMessage());
                     $response->end();
@@ -117,10 +118,11 @@ class HttpKernel implements BridgeInterface
         $post    = [];
 
         // parse body?
-        if (array_key_exists('Content-Type', $headers) &&
-            (0 === strpos($headers['Content-Type'], 'application/x-www-form-urlencoded')) &&
-            in_array(strtoupper($method), ['POST', 'PUT', 'DELETE', 'PATCH'], true)
-        ) {
+
+        $hasContentType = array_key_exists('Content-Type', $headers);
+        $isFormRequest  = (0 === strpos($headers['Content-Type'], 'application/x-www-form-urlencoded'));
+        $methodHasBody  = in_array(strtoupper($method), ['POST', 'PUT', 'DELETE', 'PATCH'], true);
+        if ($hasContentType && $isFormRequest && $methodHasBody) {
             parse_str($content, $post);
         }
 
