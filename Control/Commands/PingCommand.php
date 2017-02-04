@@ -33,9 +33,9 @@ class PingCommand extends ControlCommand
                 if ($manager->hasShutdownSlaves()) {
                     break;
                 }
-                if ($slave->getMemory() > $manager->config->worker_memory_limit) {
-                    $manager->logger->warning(sprintf(
-                        "Worker memory %s of limit %s exceeded.\n", $slave->getMemory(), $manager->config->worker_memory_limit
+                if ($slave->getMemory() > $manager->getConfig()->worker_memory_limit) {
+                    $manager->getLogger()->warning(sprintf(
+                        "Worker memory %s of limit %s exceeded.\n", $slave->getMemory(), $manager->getConfig()->worker_memory_limit
                     ));
                     $slave->setStatus(Slave::STATUS_SHUTDOWN);
                     $slave->getConnection()->write(json_encode(['cmd' => 'shutdown']));
@@ -45,7 +45,7 @@ class PingCommand extends ControlCommand
 
                 $cpuLimit = 10;
                 if ($cpuUsage > $cpuLimit) {
-                    $manager->logger->warning(sprintf("Worker cpu usage %s of limit %s exceeded.\n", $cpuLimit, $cpuUsage));
+                    $manager->getLogger()->warning(sprintf("Worker cpu usage %s of limit %s exceeded.\n", $cpuLimit, $cpuUsage));
                     $slave->setStatus(Slave::STATUS_SHUTDOWN);
                     $slave->getConnection()->write(json_encode(['cmd' => 'shutdown']));
 

@@ -17,7 +17,7 @@ class LogCommand extends ControlCommand
 {
     public function handleOnMaster(Connection $connection, ProcessManager $manager)
     {
-        $manager->logger->debug($this->data['message']);
+        $manager->getLogger()->debug($this->data['message']);
     }
 
     public function serialize()

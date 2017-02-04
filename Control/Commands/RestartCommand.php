@@ -18,7 +18,7 @@ class RestartCommand extends ControlCommand
     public function handleOnMaster(Connection $connection, ProcessManager $manager)
     {
         if ($manager->shutdownLock) {
-            $manager->logger->warning('Cluster shutdown already in progress.');
+            $manager->getLogger()->warning('Cluster shutdown already in progress.');
             $connection->write('Cluster shutdown already in progress.');
             $connection->end();
 

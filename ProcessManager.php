@@ -9,6 +9,7 @@ use PHPPM\Channels\MasterControlChannel;
 use PHPPM\Config\ConfigReader;
 use PHPPM\Control\Commands\ShutdownCommand;
 use React\EventLoop\Factory;
+use React\EventLoop\LoopInterface;
 use React\Socket\Connection;
 use React\Socket\Server;
 
@@ -20,9 +21,9 @@ class ProcessManager
     protected $slaves;
 
     /**
-     * @var \React\EventLoop\LibEventLoop|\React\EventLoop\StreamSelectLoop
+     * @var LoopInterface
      */
-    public $loop;
+    protected $loop;
 
     /**
      * @var Server
@@ -42,9 +43,9 @@ class ProcessManager
     protected $running = false;
 
     /**
-     * @var Logger
+     * @var \Monolog\Logger|Logger
      */
-    public $logger;
+    protected $logger;
 
     /**
      * @var bool
@@ -64,7 +65,31 @@ class ProcessManager
     /**
      * @var ConfigReader
      */
-    public $config;
+    protected $config;
+
+    /**
+     * @return ConfigReader
+     */
+    public function getConfig()
+    {
+        return $this->config;
+    }
+
+    /**
+     * @return LoopInterface
+     */
+    public function getLoop()
+    {
+        return $this->loop;
+    }
+
+    /**
+     * @return \Monolog\Logger|Logger
+     */
+    public function getLogger()
+    {
+        return $this->logger;
+    }
 
     /**
      * Create process manager.
@@ -89,6 +114,9 @@ class ProcessManager
         $this->logger->info('Config: '.json_encode($config->getArrayCopy(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
 
+    /**
+     * Run main loop and start slaves.
+     */
     public function run()
     {
         $this->loop = Factory::create();
@@ -132,6 +160,7 @@ class ProcessManager
 
     /**
      * Calculate slave ping timeout.
+     *
      * @return int
      */
     private function slavePingTimeout()
@@ -182,6 +211,12 @@ class ProcessManager
     public function forkSlave()
     {
         $this->logger->debug('Fork new slave.');
+
+        if (count($this->slavesCollection()) === $this->config->workers) {
+            $this->logger->warning('All slaves already spawned. Reject slave.');
+
+            return;
+        }
 
         $this->waitedSlaves++;
         $pid = pcntl_fork();
@@ -268,6 +303,11 @@ class ProcessManager
         return $this->slaves->hasShutdownSlaves() || $this->shutdownLock;
     }
 
+    /**
+     * Remove slave from collection and stop it.
+     *
+     * @param Slave $slave
+     */
     private function removeSlave(Slave $slave)
     {
         $this->logger->warning(sprintf('Die slave %s on port %s', $slave->getPid(), $slave->getPort()));
@@ -286,6 +326,11 @@ class ProcessManager
         $this->checkSlaves();
     }
 
+    /**
+     * Get slaves collection.
+     *
+     * @return SlavesCollection
+     */
     public function slavesCollection()
     {
         return $this->slaves;

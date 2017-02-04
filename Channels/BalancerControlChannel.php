@@ -34,7 +34,7 @@ class BalancerControlChannel
 
         $this->web = new Server($loop);
         $this->web->on('connection', [$this, 'onWeb']);
-        $this->web->listen($manager->config->port + 1, $manager->config->host);
+        $this->web->listen($manager->getConfig()->port + 1, $manager->getConfig()->host);
     }
 
     /**
@@ -50,7 +50,7 @@ class BalancerControlChannel
         /** @var Slave $slave */
         $slave    = $slaves[$slaveId];
         $port     = $slave->getPort();
-        $client   = stream_socket_client(sprintf('tcp://%s:%s', $this->manager->config->host, $port));
+        $client   = stream_socket_client(sprintf('tcp://%s:%s', $this->manager->getConfig()->host, $port));
         $redirect = new Stream($client, $this->loop);
 
         $incoming->on('close', function () use ($redirect) {

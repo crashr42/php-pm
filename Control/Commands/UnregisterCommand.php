@@ -18,7 +18,7 @@ class UnregisterCommand extends ControlCommand
     public function handleOnMaster(Connection $connection, ProcessManager $manager)
     {
         $pid = $this->data['pid'];
-        $manager->logger->warning(sprintf("Slave died. (pid %d)\n", $pid));
+        $manager->getLogger()->warning(sprintf("Slave died. (pid %d)\n", $pid));
         foreach ($manager->slavesCollection()->getSlaves() as $slave) {
             if ($slave->equalsByPid($pid)) {
                 $manager->slavesCollection()->removeSlave($slave);

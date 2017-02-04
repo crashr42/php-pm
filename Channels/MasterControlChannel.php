@@ -73,9 +73,9 @@ class MasterControlChannel extends EventEmitter
 
             $this->emit('done');
         } catch (ConnectionException $e) {
-            $this->manager->logger->info('Another master already running. Restart it and start current.');
+            $this->manager->getLogger()->info('Another master already running. Restart it and start current.');
 
-            $connection = stream_socket_client(sprintf('tcp://%s:%s', $this->manager->config->host, $this->manager->config->port));
+            $connection = stream_socket_client(sprintf('tcp://%s:%s', $this->manager->getConfig()->host, $this->manager->getConfig()->port));
             $connection = new Connection($connection, $this->loop);
             $bus        = new Bus($connection, $this->manager);
             $bus->on(NewSlaveCommand::class, $this->defaultHandler);
@@ -93,7 +93,7 @@ class MasterControlChannel extends EventEmitter
                         $this->emit('done');
                     });
                 } else {
-                    $this->manager->logger->err('Old master don\'t send prepare command.');
+                    $this->manager->getLogger()->err('Old master don\'t send prepare command.');
 
                     exit;
                 }
@@ -121,7 +121,7 @@ class MasterControlChannel extends EventEmitter
             $bus->on(RestartCommand::class, $this->defaultHandler);
             $bus->run();
         });
-        $controlBus->listen($this->manager->config->port, $this->manager->config->host);
+        $controlBus->listen($this->manager->getConfig()->port, $this->manager->getConfig()->host);
 
         $http = new \PHPPM\Server($controlBus);
         /** @noinspection PhpUnusedParameterInspection */
@@ -150,17 +150,17 @@ class MasterControlChannel extends EventEmitter
 
             $bus->run();
         });
-        $this->manager->config->slaves_control_port = $this->manager->config->port - 1;
+        $this->manager->getConfig()->slaves_control_port = $this->manager->getConfig()->port - 1;
 
         for ($i = 5; $i > 0; $i--) {
             try {
-                $slaveBus->listen($this->manager->config->slaves_control_port, $this->manager->config->host);
+                $slaveBus->listen($this->manager->getConfig()->slaves_control_port, $this->manager->getConfig()->host);
 
                 $this->emit('slave_bus');
 
                 break;
             } catch (ConnectionException $e) {
-                $this->manager->config->slaves_control_port--;
+                $this->manager->getConfig()->slaves_control_port--;
             }
         }
     }

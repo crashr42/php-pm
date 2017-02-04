@@ -51,7 +51,7 @@ class NewMasterCommand extends ControlCommand
             $bus->send((new NewSlaveCommand())->serialize($slave->getPort()));
 
             $message = sprintf('Shutdown http://%s:%s', $slave->getHost(), $slave->getPort());
-            $manager->logger->info($message);
+            $manager->getLogger()->info($message);
             $bus->send((new LogCommand())->serialize($message));
 
             if (count($slaves) > 0) {
@@ -60,8 +60,8 @@ class NewMasterCommand extends ControlCommand
                 $bus->send((new LogCommand())->serialize('Last worker shutdown.'));
                 $bus->send((new PrepareMasterCommand())->serialize());
 
-                $manager->loop->addTimer(2, function () use ($bus, $manager) {
-                    $manager->loop->stop();
+                $manager->getLoop()->addTimer(2, function () use ($bus, $manager) {
+                    $manager->getLoop()->stop();
 
                     exit;
                 });

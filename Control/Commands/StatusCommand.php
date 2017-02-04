@@ -18,7 +18,7 @@ class StatusCommand extends ControlCommand
     public function handleOnMaster(Connection $connection, ProcessManager $manager)
     {
         $response = $manager->clusterStatusAsJson();
-        $manager->logger->info(sprintf("Cluster status: %s\n", $response));
+        $manager->getLogger()->info(sprintf("Cluster status: %s\n", $response));
         $connection->end($response);
     }
 

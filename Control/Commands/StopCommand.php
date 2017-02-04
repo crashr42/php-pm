@@ -19,7 +19,7 @@ class StopCommand extends ControlCommand
     public function handleOnMaster(Connection $connection, ProcessManager $manager)
     {
         if ($manager->shutdownLock) {
-            $manager->logger->warning('Cluster stop in progress ...');
+            $manager->getLogger()->warning('Cluster stop in progress ...');
             $connection->write('Cluster stop in progress ...');
             $connection->end();
 
@@ -32,8 +32,8 @@ class StopCommand extends ControlCommand
         $slaves = $manager->slavesCollection()->getSlaves();
 
         $manager->gracefulShutdown(array_pop($slaves), $slaves, $connection, Closure::bind(function () use ($manager) {
-            $manager->logger->info('Cluster stopped.');
-            $manager->loop->stop();
+            $manager->getLogger()->info('Cluster stopped.');
+            $manager->getLoop()->stop();
             exit;
         }, $this));
     }
