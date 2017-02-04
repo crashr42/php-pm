@@ -160,6 +160,48 @@ class ProcessManager
     }
 
     /**
+     * Check slaves count and run new slave if count less then needed.
+     */
+    public function checkSlaves()
+    {
+        if (!$this->running || !$this->allowNewInstances || $this->waitedSlaves > 0 || $this->shutdownLock) {
+            return;
+        }
+
+        $slavesCount = count($this->slaves->getSlaves());
+        if ($this->config->workers > $slavesCount) {
+            $this->logger->warning('Slaves count less then needed.');
+
+            $this->runSlaves();
+        }
+    }
+
+    /**
+     * Create new slave instance.
+     */
+    public function forkSlave()
+    {
+        $this->logger->debug('Fork new slave.');
+
+        $this->waitedSlaves++;
+        $pid = pcntl_fork();
+        if (!$pid) {
+            try {
+                chdir($this->config->working_directory);
+                new ProcessSlave($this->config);
+            } catch (Exception $e) {
+                foreach ($this->slaves->getSlaves() as $slave) {
+                    if ($slave->equalsByPid(getmypid())) {
+                        $this->removeSlave($slave);
+                    }
+                }
+                $this->logger->error($e->getMessage(), $e->getTrace());
+            }
+            exit;
+        }
+    }
+
+    /**
      * Get cluster status as json.
      *
      * @return string
@@ -224,48 +266,6 @@ class ProcessManager
     public function hasShutdownSlaves()
     {
         return $this->slaves->hasShutdownSlaves() || $this->shutdownLock;
-    }
-
-    /**
-     * Check slaves count and run new slave if count less then needed.
-     */
-    public function checkSlaves()
-    {
-        if (!$this->running || !$this->allowNewInstances || $this->waitedSlaves > 0 || $this->shutdownLock) {
-            return;
-        }
-
-        $slavesCount = count($this->slaves->getSlaves());
-        if ($this->config->workers > $slavesCount) {
-            $this->logger->warning('Slaves count less then needed.');
-
-            $this->runSlaves();
-        }
-    }
-
-    /**
-     * Create new slave instance.
-     */
-    public function forkSlave()
-    {
-        $this->logger->debug('Fork new slave.');
-
-        $this->waitedSlaves++;
-        $pid = pcntl_fork();
-        if (!$pid) {
-            try {
-                chdir($this->config->working_directory);
-                new ProcessSlave($this->config);
-            } catch (Exception $e) {
-                foreach ($this->slaves->getSlaves() as $slave) {
-                    if ($slave->equalsByPid(getmypid())) {
-                        $this->removeSlave($slave);
-                    }
-                }
-                $this->logger->error($e->getMessage(), $e->getTrace());
-            }
-            exit;
-        }
     }
 
     private function removeSlave(Slave $slave)

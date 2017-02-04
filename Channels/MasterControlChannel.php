@@ -86,10 +86,15 @@ class MasterControlChannel extends EventEmitter
 
             $connection->on('close', function () {
                 if ($this->prepareMaster) {
-                    $this->runControlBus();
 
-                    $this->emit('done');
+                    $this->loop->addTimer(2, function () {
+                        $this->runControlBus();
+
+                        $this->emit('done');
+                    });
                 } else {
+                    $this->manager->logger->err('Old master don\'t send prepare command.');
+
                     exit;
                 }
             });
