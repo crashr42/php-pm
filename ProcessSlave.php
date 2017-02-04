@@ -138,11 +138,11 @@ class ProcessSlave
     {
         $bornAt = date('Y-m-d H:i:s O');
 
-        $this->loop       = Factory::create();
+        $this->loop = Factory::create();
 
         $this->client     = stream_socket_client(sprintf('tcp://%s:%s', $this->config->host, $this->config->slaves_control_port));
         $this->connection = new Connection($this->client, $this->loop);
-        $this->bus = new Bus($this->connection, $this);
+        $this->bus        = new Bus($this->connection, $this);
         $this->bus->on(ShutdownCommand::class, function () {
             $this->shutdown = true;
         });
@@ -189,9 +189,8 @@ class ProcessSlave
         $http   = new \PHPPM\Server($socket);
         $http->on('request', [$this, 'onRequest']);
 
-        $port    = $this->config->port + 2;
-        $maxPort = $port + self::MAX_WORKERS;
-        while ($port < $maxPort) {
+        $port = $this->config->slaves_min_port;
+        while ($port < $this->config->slaves_max_port) {
             try {
                 $socket->listen($port, $this->config->host);
                 $this->port = $port;

@@ -74,6 +74,8 @@ class ProcessManager
     public function __construct(ConfigReader $config)
     {
         $this->config = $config;
+        $this->config->slaves_min_port = $config->port + 2;
+        $this->config->slaves_max_port = $this->config->slaves_min_port + 90;
         $this->slaves = new SlavesCollection();
 
         cli_set_process_title('react master');
