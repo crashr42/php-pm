@@ -8,6 +8,7 @@ use PHPPM\Channels\BalancerControlChannel;
 use PHPPM\Channels\MasterControlChannel;
 use PHPPM\Config\ConfigReader;
 use PHPPM\Control\Commands\ShutdownCommand;
+use PHPPM\Log\Logger;
 use React\EventLoop\Factory;
 use React\EventLoop\LoopInterface;
 use React\Socket\Connection;
@@ -109,7 +110,7 @@ class ProcessManager
 
         set_error_handler(function ($errno, $errstr, $errfile, $errline) {
             $this->logger->crit(sprintf('"[%s] %s" in %s:%s', $errno, $errstr, $errfile, $errline), func_get_args());
-        }) ;
+        });
 
         $this->logger->info('Config: '.json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }

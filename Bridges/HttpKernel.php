@@ -120,10 +120,12 @@ class HttpKernel implements BridgeInterface
         // parse body?
 
         $hasContentType = array_key_exists('Content-Type', $headers);
-        $isFormRequest  = (0 === strpos($headers['Content-Type'], 'application/x-www-form-urlencoded'));
-        $methodHasBody  = in_array(strtoupper($method), ['POST', 'PUT', 'DELETE', 'PATCH'], true);
-        if ($hasContentType && $isFormRequest && $methodHasBody) {
-            parse_str($content, $post);
+        if ($hasContentType) {
+            $isFormRequest = (0 === strpos($headers['Content-Type'], 'application/x-www-form-urlencoded'));
+            $methodHasBody = in_array(strtoupper($method), ['POST', 'PUT', 'DELETE', 'PATCH'], true);
+            if ($isFormRequest && $methodHasBody) {
+                parse_str($content, $post);
+            }
         }
 
         $syRequest = new LumenRequest($query, $post, [], [], [], [], $content);

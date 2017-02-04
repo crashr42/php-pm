@@ -8,6 +8,7 @@ use PHPPM\Control\Commands\PingCommand;
 use PHPPM\Control\Commands\RegisterCommand;
 use PHPPM\Control\Commands\ShutdownCommand;
 use PHPPM\Control\Commands\UnregisterCommand;
+use PHPPM\Log\Logger;
 use React\EventLoop\Factory;
 use React\Http\Request;
 use React\Http\Response;

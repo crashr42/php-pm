@@ -7,9 +7,8 @@
  * Time: 9:20 PM
  */
 
-namespace PHPPM;
+namespace PHPPM\Log;
 
-use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\ErrorLogHandler;
 use Monolog\Handler\StreamHandler;
 
@@ -25,7 +24,7 @@ class Logger
      */
     public static function get($class, $logFile, $level = 'debug')
     {
-        $lineFormatter = new LineFormatter('[%datetime%] %channel%.%level_name%: %message% %context% %extra%', null, true, true);
+        $lineFormatter = new LineFormatter('[%datetime%] %channel%.%level_name% [%pid]: %message% %context% %extra%', null, true, true);
 
         /** @var string|int $level */
         $level = \Monolog\Logger::toMonologLevel($level);
