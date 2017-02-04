@@ -99,8 +99,8 @@ class ProcessManager
     public function __construct(ConfigReader $config)
     {
         $this->config                   = $config;
-        $this->config->workers_min_port = $config->port + 2;
-        $this->config->workers_max_port = $this->config->workers_min_port + 90;
+        $this->config->workers_min_port = $config->port + 2; // reverse 5500 and 5501
+        $this->config->workers_max_port = $this->config->workers_min_port + ProcessWorker::MAX_WORKERS;
         $this->workers                  = new WorkersCollection();
 
         cli_set_process_title('react master');
