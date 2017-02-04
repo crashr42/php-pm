@@ -72,8 +72,6 @@ class NewMasterCommand extends ControlCommand
 
                 $manager->getLoop()->addTimer(2, function () use ($bus, $manager) {
                     $manager->getLoop()->stop();
-
-                    exit;
                 });
             }
         });
