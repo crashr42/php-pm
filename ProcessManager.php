@@ -274,7 +274,7 @@ class ProcessManager
 
         /** @var Connection $connection */
         $slave->getConnection()->on('close', function () use ($slave, $slaves, $client, $callback) {
-            $message = sprintf("Shutdown http://%s:%s", $slave->getHost(), $slave->getPort());
+            $message = sprintf('Shutdown http://%s:%s', $slave->getHost(), $slave->getPort());
             $this->logger->info($message);
             $client->write($message);
             if (count($slaves) > 0) {
