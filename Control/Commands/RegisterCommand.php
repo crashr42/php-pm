@@ -16,7 +16,7 @@ use React\Socket\Connection;
 
 class RegisterCommand extends ControlCommand
 {
-    public function handle(Connection $connection, ProcessManager $manager)
+    public function handleOnMaster(Connection $connection, ProcessManager $manager)
     {
         $manager->waitedSlaves--;
 
@@ -42,7 +42,7 @@ class RegisterCommand extends ControlCommand
             })) === 0;
 
         if ($isNew) {
-            $manager->logger->info(sprintf("New slave %s up and ready.\n", $newSlave->getPort()));
+            $manager->logger->info(sprintf('New slave %s up and ready.', $newSlave->getPort()));
             $manager->slavesCollection()->addSlave($newSlave);
         }
     }

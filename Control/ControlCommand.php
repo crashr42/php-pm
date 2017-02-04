@@ -1,7 +1,9 @@
 <?php
 
 namespace PHPPM\Control;
+
 use PHPPM\ProcessManager;
+use PHPPM\ProcessSlave;
 use React\Socket\Connection;
 
 /**
@@ -19,7 +21,15 @@ abstract class ControlCommand
         $this->data = $data;
     }
 
-    public abstract function handle(Connection $connection, ProcessManager $manager);
+    public function handleOnMaster(Connection $connection, ProcessManager $manager)
+    {
+
+    }
+
+    public function handleOnSlave(Connection $connection, ProcessSlave $manager)
+    {
+
+    }
 
     public abstract function serialize();
 
@@ -31,7 +41,11 @@ abstract class ControlCommand
      */
     public static function find($raw)
     {
-        $data = json_decode($raw, true);
+        $data = @json_decode($raw, true) ?: [];
+
+        if (!array_key_exists('cmd', $data)) {
+            return false;
+        }
 
         $commandClass = sprintf('PHPPM\\Control\\Commands\\%sCommand', ucfirst($data['cmd']));
 

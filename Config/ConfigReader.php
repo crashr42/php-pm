@@ -22,6 +22,8 @@ namespace PHPPM\Config;
  * @property integer request_timeout
  * @property string working_directory
  * @property string appenv
+ * @property integer slaves_control_port
+ * @property string check_url
  */
 class ConfigReader extends \ArrayObject
 {

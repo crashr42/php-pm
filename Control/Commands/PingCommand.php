@@ -15,15 +15,17 @@ use React\Socket\Connection;
  */
 class PingCommand extends ControlCommand
 {
-    public function handle(Connection $connection, ProcessManager $manager)
+    public function handleOnMaster(Connection $connection, ProcessManager $manager)
     {
         $slaves = $manager->slavesCollection();
 
         foreach ($slaves->getSlaves() as $idx => &$slave) {
-            if ($slave->equalsByPid($this->data['pid'])) {
-                $slave->setMemory($this->data['memory']);
-                $slave->setBornAt($this->data['born_at']);
-                $slave->setPingAt($this->data['ping_at']);
+            $status = $this->data['status'];
+
+            if ($slave->equalsByPid($status['pid'])) {
+                $slave->setMemory($status['memory']);
+                $slave->setBornAt($status['born_at']);
+                $slave->setPingAt($status['ping_at']);
 
                 $cpuUsage = (int)shell_exec("ps -p {$slave->getPid()} -o %cpu | tail -n 1");
                 $slave->setCpuUsage($cpuUsage);
@@ -56,6 +58,6 @@ class PingCommand extends ControlCommand
 
     public function serialize()
     {
-        return json_encode(['cmd' => 'ping']);
+        return json_encode(['cmd' => 'ping', 'status' => func_get_arg(0)]);
     }
 }

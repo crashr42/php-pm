@@ -15,13 +15,13 @@ use React\Socket\Connection;
 
 class UnregisterCommand extends ControlCommand
 {
-    public function handle(Connection $connection, ProcessManager $manager)
+    public function handleOnMaster(Connection $connection, ProcessManager $manager)
     {
         $pid = $this->data['pid'];
         $manager->logger->warning(sprintf("Slave died. (pid %d)\n", $pid));
-        foreach ($manager->slavesCollection()->getSlaves() as $idx => $slave) {
+        foreach ($manager->slavesCollection()->getSlaves() as $slave) {
             if ($slave->equalsByPid($pid)) {
-                $manager->slavesCollection()->removeSlave($idx);
+                $manager->slavesCollection()->removeSlave($slave);
             }
         }
         $manager->checkSlaves();

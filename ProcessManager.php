@@ -8,7 +8,6 @@ use PHPPM\Channels\BalancerControlChannel;
 use PHPPM\Channels\MasterControlChannel;
 use PHPPM\Config\ConfigReader;
 use PHPPM\Control\Commands\ShutdownCommand;
-use PHPPM\Control\ControlCommand;
 use React\EventLoop\Factory;
 use React\Socket\Connection;
 use React\Socket\Server;
@@ -81,9 +80,9 @@ class ProcessManager
 
         $this->logger = Logger::get(static::class, $config->log_file);
 
-        set_error_handler(Closure::bind(function ($errno, $errstr, $errfile, $errline) {
-            $this->logger->crit(sprintf('Fatal error "[%s] %s" in %s:%s', $errno, $errstr, $errfile, $errline), func_get_args());
-        }, $this));
+        set_error_handler(function ($errno, $errstr, $errfile, $errline) {
+            $this->logger->crit(sprintf('"[%s] %s" in %s:%s', $errno, $errstr, $errfile, $errline), func_get_args());
+        }, E_STRICT | E_ERROR) ;
 
         $this->logger->info('Config: '.json_encode($config->getArrayCopy(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
@@ -92,36 +91,39 @@ class ProcessManager
     {
         $this->loop = Factory::create();
 
-        new MasterControlChannel($this, $this->loop);
-        new BalancerControlChannel($this, $this->loop);
+        $mc = new MasterControlChannel($this, $this->loop);
+        $mc->on('done', function () {
+            new BalancerControlChannel($this, $this->loop);
 
-        $this->runSlaves();
+            $this->runSlaves();
 
-        $this->running = true;
+            $this->running = true;
 
-        /** @noinspection PhpParamsInspection */
-        $this->loop->addPeriodicTimer(1, Closure::bind(function () {
-            $this->checkSlaves();
-        }, $this));
+            /** @noinspection PhpParamsInspection */
+            $this->loop->addPeriodicTimer(1, Closure::bind(function () {
+                $this->checkSlaves();
+            }, $this));
 
-        /** @noinspection PhpParamsInspection */
-        $this->loop->addPeriodicTimer(1, Closure::bind(function () {
-            foreach ($this->slaves->getSlaves() as $slave) {
-                if ($slave->getPingAt() === null) {
-                    continue;
-                }
+            /** @noinspection PhpParamsInspection */
+            $this->loop->addPeriodicTimer(1, Closure::bind(function () {
+                foreach ($this->slaves->getSlaves() as $slave) {
+                    if ($slave->getPingAt() === null) {
+                        continue;
+                    }
 
-                if ((time() - strtotime($slave->getPingAt())) > $this->slavePingTimeout()) {
-                    $this->logger->info("Timeout ping from worker at pid {$slave->getPid()}. Killing it ...");
-                    if (posix_kill($slave->getPid(), SIGKILL)) {
-                        $this->logger->warn("Killed worker at pid {$slave->getPid()}.");
-                        $this->removeSlave($slave);
-                    } else {
-                        $this->logger->warn("Can't kill worker at pid {$slave->getPid()}.");
+                    if ((time() - strtotime($slave->getPingAt())) > $this->slavePingTimeout()) {
+                        $this->logger->info("Timeout ping from worker at pid {$slave->getPid()}. Killing it ...");
+                        if (posix_kill($slave->getPid(), SIGKILL)) {
+                            $this->logger->warn("Killed worker at pid {$slave->getPid()}.");
+                            $this->removeSlave($slave);
+                        } else {
+                            $this->logger->warn("Can't kill worker at pid {$slave->getPid()}.");
+                        }
                     }
                 }
-            }
-        }, $this));
+            }, $this));
+        });
+        $mc->run();
 
         $this->loop->run();
     }
@@ -156,21 +158,10 @@ class ProcessManager
     }
 
     /**
-     * Handle raw control command and process it.
+     * Get cluster status as json.
      *
-     * @param string $raw
-     * @param Connection $connection
+     * @return string
      */
-    public function processControlCommand($raw, Connection $connection)
-    {
-        if ($command = ControlCommand::find($raw)) {
-            $command->handle($connection, $this);
-        } else {
-            $this->logger->warning("Unknown command `{$raw}`.");
-            $connection->close();
-        }
-    }
-
     public function clusterStatusAsJson()
     {
         $data['pid']                 = getmypid();
@@ -180,6 +171,7 @@ class ProcessManager
         $data['waited_slaves']       = $this->waitedSlaves;
         $data['slaves_count']        = count($this->slaves);
         $data['allow_new_instances'] = $this->allowNewInstances;
+        $data['slaves_control_port'] = $this->config->slaves_control_port;
 
         $data['slaves'] = array_values(array_map(function ($slave) {
             /** @var Slave $slave */
@@ -202,8 +194,8 @@ class ProcessManager
         $slave->setStatus(Slave::STATUS_SHUTDOWN);
 
         /** @var Connection $connection */
-        $slave->getConnection()->on('close', Closure::bind(function () use ($slave, $slaves, $client, $callback) {
-            $message = sprintf("Shutdown http://%s:%s\n", $slave->getHost(), $slave->getPort());
+        $slave->getConnection()->on('close', function () use ($slave, $slaves, $client, $callback) {
+            $message = sprintf("Shutdown http://%s:%s", $slave->getHost(), $slave->getPort());
             $this->logger->info($message);
             $client->write($message);
             if (count($slaves) > 0) {
@@ -216,7 +208,7 @@ class ProcessManager
                 $client->write('Last worker shutdown.');
                 $client->end();
             }
-        }, $this));
+        });
         $client->write(sprintf('Try shutdown http://%s:%s', $slave->getHost(), $slave->getPort()));
 
         $slave->getConnection()->write((new ShutdownCommand())->serialize());
@@ -237,9 +229,7 @@ class ProcessManager
      */
     public function checkSlaves()
     {
-        $this->logger->debug('Check slaves.');
-
-        if (!$this->running || !$this->allowNewInstances || $this->waitedSlaves > 0) {
+        if (!$this->running || !$this->allowNewInstances || $this->waitedSlaves > 0 || $this->shutdownLock) {
             return;
         }
 
@@ -254,7 +244,7 @@ class ProcessManager
     /**
      * Create new slave instance.
      */
-    private function forkSlave()
+    public function forkSlave()
     {
         $this->logger->debug('Fork new slave.');
 
@@ -278,7 +268,7 @@ class ProcessManager
 
     private function removeSlave(Slave $slave)
     {
-        $this->logger->warning(sprintf("Die slave %s on port %s\n", $slave->getPid(), $slave->getPort()));
+        $this->logger->warning(sprintf('Die slave %s on port %s', $slave->getPid(), $slave->getPort()));
 
         $this->slaves->removeSlave($slave);
 
