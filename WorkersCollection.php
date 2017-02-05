@@ -43,8 +43,8 @@ class WorkersCollection implements \Countable
 
     public function removeWorker(Worker $worker)
     {
-        foreach ($this->workers as $idx => $slv) {
-            if ($slv->equals($worker)) {
+        foreach ($this->workers as $idx => $wrk) {
+            if ($wrk->equals($worker)) {
                 unset($this->workers[$idx]);
             }
         }

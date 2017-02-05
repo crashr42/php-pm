@@ -253,9 +253,9 @@ class ProcessManager
         $data['allow_new_instances'] = $this->allowNewInstances;
         $data['workers_control_port'] = $this->config->workers_control_port;
 
-        $data['workers'] = array_values(array_map(function ($workers) {
-            /** @var Worker $workers */
-            return $workers->asJson();
+        $data['workers'] = array_values(array_map(function ($worker) {
+            /** @var Worker $worker */
+            return $worker->asJson();
         }, $this->workers->all()));
 
         return json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
@@ -309,7 +309,7 @@ class ProcessManager
      *
      * @param Worker $worker
      */
-    private function removeWorker(Worker $worker)
+    public function removeWorker(Worker $worker)
     {
         $this->logger->warning(sprintf('Die worker %s on port %s', $worker->getPid(), $worker->getPort()));
 

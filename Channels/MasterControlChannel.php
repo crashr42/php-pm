@@ -86,7 +86,6 @@ class MasterControlChannel extends EventEmitter
 
             $connection->on('close', function () {
                 if ($this->prepareMaster) {
-
                     $this->loop->addTimer(2, function () {
                         $this->runControlBus();
 
@@ -111,8 +110,8 @@ class MasterControlChannel extends EventEmitter
 
     private function runControlBus()
     {
-        $controlBus = new Server($this->loop);
-        $controlBus->on('connection', function (Connection $connection) {
+        $controlServer = new Server($this->loop);
+        $controlServer->on('connection', function (Connection $connection) {
             $bus = new Bus($connection, $this->manager);
             $bus->on(NewMasterCommand::class, $this->defaultHandler);
             $bus->on(StatusCommand::class, $this->defaultHandler);
@@ -121,9 +120,9 @@ class MasterControlChannel extends EventEmitter
             $bus->on(RestartCommand::class, $this->defaultHandler);
             $bus->run();
         });
-        $controlBus->listen($this->manager->getConfig()->port, $this->manager->getConfig()->host);
+        $controlServer->listen($this->manager->getConfig()->port, $this->manager->getConfig()->host);
 
-        $http = new \PHPPM\Server($controlBus);
+        $http = new \PHPPM\Server($controlServer);
         /** @noinspection PhpUnusedParameterInspection */
         $http->on('request', function (Request $request, Response $response) {
             $response->writeHead();
@@ -133,8 +132,8 @@ class MasterControlChannel extends EventEmitter
 
     private function runWorkerBus()
     {
-        $workersBus = new Server($this->loop);
-        $workersBus->on('connection', function (Connection $connection) {
+        $workersServer = new Server($this->loop);
+        $workersServer->on('connection', function (Connection $connection) {
             $bus = new Bus($connection, $this->manager);
             $bus->on(RegisterCommand::class, $this->defaultHandler);
             $bus->on(UnregisterCommand::class, $this->defaultHandler);
@@ -143,7 +142,7 @@ class MasterControlChannel extends EventEmitter
             $connection->on('close', function () use ($connection) {
                 foreach ($this->manager->workersCollection()->all() as $worker) {
                     if ($worker->equalsByConnection($connection)) {
-                        $this->manager->workersCollection()->removeWorker($worker);
+                        $this->manager->removeWorker($worker);
                     }
                 }
             });
@@ -154,7 +153,7 @@ class MasterControlChannel extends EventEmitter
 
         for ($i = 5; $i > 0; $i--) {
             try {
-                $workersBus->listen($this->manager->getConfig()->workers_control_port, $this->manager->getConfig()->host);
+                $workersServer->listen($this->manager->getConfig()->workers_control_port, $this->manager->getConfig()->host);
 
                 $this->emit('workers_bus');
 
