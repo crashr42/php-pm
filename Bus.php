@@ -26,6 +26,11 @@ class Bus extends EventEmitter
     private $manager;
 
     /**
+     * @var \Closure
+     */
+    private $defaultHandler;
+
+    /**
      * Bus constructor.
      * @param Connection $connection
      * @param ProcessManager|ProcessWorker $manager
@@ -34,6 +39,10 @@ class Bus extends EventEmitter
     {
         $this->connection = $connection;
         $this->manager    = $manager;
+
+        $this->defaultHandler = function (ControlCommand $command, Connection $connection, $manager) {
+            $command->handle($connection, $manager);
+        };
     }
 
     /**
@@ -100,5 +109,15 @@ class Bus extends EventEmitter
     public function isDie()
     {
         return !$this->isAlive();
+    }
+
+    /**
+     * Define default command handler.
+     *
+     * @param string $commandClass
+     */
+    public function def($commandClass)
+    {
+        $this->on($commandClass, $this->defaultHandler);
     }
 }

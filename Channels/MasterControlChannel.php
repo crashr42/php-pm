@@ -49,19 +49,10 @@ class MasterControlChannel extends EventEmitter
      */
     private $prepareMaster = false;
 
-    /**
-     * @var Closure
-     */
-    private $defaultHandler;
-
     public function __construct(ProcessManager $manager, LoopInterface $loop)
     {
         $this->manager = $manager;
         $this->loop    = $loop;
-
-        $this->defaultHandler = function (ControlCommand $command, Connection $connection, ProcessManager $manager) {
-            $command->handle($connection, $manager);
-        };
     }
 
     public function run()
@@ -78,11 +69,11 @@ class MasterControlChannel extends EventEmitter
             $connection = stream_socket_client(sprintf('tcp://%s:%s', $this->manager->getConfig()->host, $this->manager->getConfig()->port));
             $connection = new Connection($connection, $this->loop);
             $bus        = new Bus($connection, $this->manager);
-            $bus->on(NewWorkerCommand::class, $this->defaultHandler);
+            $bus->def(NewWorkerCommand::class);
             $bus->on(PrepareMasterCommand::class, function () {
                 $this->prepareMaster = true;
             });
-            $bus->on(LogCommand::class, $this->defaultHandler);
+            $bus->def(LogCommand::class);
 
             $connection->on('close', function () {
                 if ($this->prepareMaster) {
@@ -115,11 +106,11 @@ class MasterControlChannel extends EventEmitter
         $controlServer = new Server($this->loop);
         $controlServer->on('connection', function (Connection $connection) {
             $bus = new Bus($connection, $this->manager);
-            $bus->on(NewMasterCommand::class, $this->defaultHandler);
-            $bus->on(StatusCommand::class, $this->defaultHandler);
-            $bus->on(ShutdownCommand::class, $this->defaultHandler);
-            $bus->on(StopCommand::class, $this->defaultHandler);
-            $bus->on(RestartCommand::class, $this->defaultHandler);
+            $bus->def(NewMasterCommand::class);
+            $bus->def(StatusCommand::class);
+            $bus->def(ShutdownCommand::class);
+            $bus->def(StopCommand::class);
+            $bus->def(RestartCommand::class);
             $bus->run();
         });
         $controlServer->listen($this->manager->getConfig()->port, $this->manager->getConfig()->host);
@@ -137,9 +128,9 @@ class MasterControlChannel extends EventEmitter
         $workersServer = new Server($this->loop);
         $workersServer->on('connection', function (Connection $connection) {
             $bus = new Bus($connection, $this->manager);
-            $bus->on(RegisterCommand::class, $this->defaultHandler);
-            $bus->on(UnregisterCommand::class, $this->defaultHandler);
-            $bus->on(PingCommand::class, $this->defaultHandler);
+            $bus->def(RegisterCommand::class);
+            $bus->def(UnregisterCommand::class);
+            $bus->def(PingCommand::class);
 
             $connection->on('close', function () use ($connection) {
                 foreach ($this->manager->workersCollection()->all() as $worker) {
