@@ -7,8 +7,8 @@
     "symfony/console": "~2.6",
     "react/react": "0.4.*",
     "monolog/monolog": "^1.17",
-    "illuminate/http": "^5.1",
-    "illuminate/session": "^5.1"
+    "illuminate/http": "5.1.20",
+    "illuminate/session": "5.1.20"
   },
   "autoload": {
     "psr-4": {
