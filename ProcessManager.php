@@ -107,7 +107,7 @@ class ProcessManager
 
         cli_set_process_title(sprintf('[%d] react master', getmypid()));
 
-        $this->logger = Logger::get(static::class, $config->log_file, $config->log_level);
+        $this->logger = Logger::get(static::class, $config->log_file, $config->log_level, getmypid());
 
         set_error_handler(function ($errno, $errstr, $errfile, $errline) {
             $this->logger->crit(sprintf('"[%s] %s" in %s:%s', $errno, $errstr, $errfile, $errline), func_get_args());

@@ -14,6 +14,7 @@ use React\Http\Request;
 use React\Http\Response;
 use React\Socket\Connection;
 use React\Socket\ConnectionException;
+use React\Socket\Server;
 
 class ProcessWorker
 {
@@ -26,16 +27,6 @@ class ProcessWorker
      * @var \React\EventLoop\LibEventLoop|\React\EventLoop\StreamSelectLoop
      */
     protected $loop;
-
-    /**
-     * @var resource
-     */
-    protected $client;
-
-    /**
-     * @var Connection
-     */
-    protected $connection;
 
     /**
      * @var Bridges\BridgeInterface
@@ -99,7 +90,7 @@ class ProcessWorker
     {
         $this->config = $config;
 
-        $this->logger = Logger::get(static::class, $config->log_file, $config->log_level);
+        $this->logger = Logger::get(static::class, $config->log_file, $config->log_level, $config->master_pid);
 
         $this->bootstrap($config->bootstrap, $config->appenv);
         $this->connectToMaster();
@@ -148,13 +139,13 @@ class ProcessWorker
 
         $this->loop = Factory::create();
 
-        $this->client     = stream_socket_client(sprintf('tcp://%s:%s', $this->config->host, $this->config->workers_control_port));
-        $this->connection = new Connection($this->client, $this->loop);
-        $this->bus        = new Bus($this->connection, $this);
+        $client     = stream_socket_client(sprintf('tcp://%s:%s', $this->config->host, $this->config->workers_control_port));
+        $connection = new Connection($client, $this->loop);
+        $this->bus  = new Bus($connection, $this);
         $this->bus->on(ShutdownCommand::class, function () {
             $this->shutdown = true;
         });
-        $this->bus->run();
+        $this->bus->start();
 
         /** @noinspection PhpParamsInspection */
         $this->loop->addPeriodicTimer(self::PING_TIMEOUT, function () use ($bornAt) {
@@ -189,11 +180,11 @@ class ProcessWorker
             }
         });
 
-        $this->connection->on('close', Closure::bind(function () {
+        $connection->on('close', Closure::bind(function () {
             $this->shutdown();
         }, $this));
 
-        $socket = new \React\Socket\Server($this->loop);
+        $socket = new Server($this->loop);
         $http   = new \PHPPM\Server($socket);
         $http->on('request', [$this, 'onRequest']);
 
@@ -250,9 +241,9 @@ class ProcessWorker
     protected function shutdown()
     {
         $this->logger->info(sprintf('Shutting worker process down (http://%s:%s)', $this->config->host, $this->port));
-        if ($this->connection->isWritable()) {
+        if ($this->bus->isDie()) {
             $this->bus->send(UnregisterCommand::build(getmypid()));
-            $this->connection->close();
+            $this->bus->stop();
         }
         $this->loop->stop();
 

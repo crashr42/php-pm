@@ -9,6 +9,7 @@
 
 namespace PHPPM\Control\Commands;
 
+use Monolog\Logger;
 use PHPPM\Bus;
 use PHPPM\Control\ControlCommand;
 use PHPPM\ProcessManager;
@@ -42,7 +43,7 @@ class NewMasterCommand extends ControlCommand
 
     private function gracefulShutdown(Bus $bus, ProcessManager $manager, Worker $worker, $workers)
     {
-        $bus->send(LogCommand::build(sprintf('Workers to restart %d', count($workers))));
+        $bus->send(LogCommand::build(sprintf('Workers to restart %d', count($workers) + 1), Logger::INFO));
 
         $worker->setStatus(Worker::STATUS_SHUTDOWN);
 
@@ -70,7 +71,7 @@ class NewMasterCommand extends ControlCommand
 
             $manager->getLogger()->error('New master connection is die. Revert current master state.');
 
-            $bus->end();
+            $bus->stop();
 
             return;
         }

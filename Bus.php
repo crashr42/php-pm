@@ -48,7 +48,7 @@ class Bus extends EventEmitter
     /**
      * Handle commands.
      */
-    public function run()
+    public function start()
     {
         $this->connection->on('data', function ($raw) {
             $this->manager->getLogger()->debug($raw);
@@ -86,7 +86,7 @@ class Bus extends EventEmitter
     /**
      * Stop handle command and close connections.
      */
-    public function end()
+    public function stop()
     {
         $this->connection->close();
     }

@@ -92,7 +92,7 @@ class MasterControlChannel extends EventEmitter
             });
 
             $this->on('workers_bus', function () use ($bus) {
-                $bus->run();
+                $bus->start();
 
                 $bus->send(NewMasterCommand::build(getmypid()));
             });
@@ -111,7 +111,7 @@ class MasterControlChannel extends EventEmitter
             $bus->def(ShutdownCommand::class);
             $bus->def(StopCommand::class);
             $bus->def(RestartCommand::class);
-            $bus->run();
+            $bus->start();
         });
         $controlServer->listen($this->manager->getConfig()->port, $this->manager->getConfig()->host);
 
@@ -140,7 +140,7 @@ class MasterControlChannel extends EventEmitter
                 }
             });
 
-            $bus->run();
+            $bus->start();
         });
         $this->manager->getConfig()->workers_control_port = $this->manager->getConfig()->port - 1;
 
