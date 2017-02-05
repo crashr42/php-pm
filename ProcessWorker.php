@@ -158,7 +158,7 @@ class ProcessWorker
 
         /** @noinspection PhpParamsInspection */
         $this->loop->addPeriodicTimer(self::PING_TIMEOUT, function () use ($bornAt) {
-            $result = $this->bus->send((new PingCommand())->serialize([
+            $result = $this->bus->send(PingCommand::build([
                 'pid'     => getmypid(),
                 'memory'  => memory_get_usage(true),
                 'born_at' => $bornAt,
@@ -210,7 +210,7 @@ class ProcessWorker
             }
         }
 
-        $this->bus->send((new RegisterCommand())->serialize(getmypid(), $port));
+        $this->bus->send(RegisterCommand::build(getmypid(), $port));
     }
 
     /**
@@ -250,7 +250,7 @@ class ProcessWorker
     {
         $this->logger->info(sprintf('Shutting worker process down (http://%s:%s)', $this->config->host, $this->port));
         if ($this->connection->isWritable()) {
-            $this->bus->send((new UnregisterCommand())->serialize(getmypid()));
+            $this->bus->send(UnregisterCommand::build(getmypid()));
             $this->connection->close();
         }
         $this->loop->stop();

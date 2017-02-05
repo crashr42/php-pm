@@ -13,8 +13,15 @@ use React\Socket\Connection;
  */
 abstract class ControlCommand
 {
+    /**
+     * @var array
+     */
     protected $data;
 
+    /**
+     * ControlCommand constructor.
+     * @param array $data
+     */
     public function __construct(array $data = [])
     {
         $this->data = $data;
@@ -28,6 +35,11 @@ abstract class ControlCommand
      */
     public abstract function handle(Connection $connection, ProcessManager $manager);
 
+    /**
+     * Serialize command for send from bus.
+     *
+     * @return string
+     */
     public abstract function serialize();
 
     /**
@@ -51,5 +63,15 @@ abstract class ControlCommand
         }
 
         return false;
+    }
+
+    /**
+     * Build command with arguments and serialize it for send from bus.
+     *
+     * @return string
+     */
+    public static function build()
+    {
+        return call_user_func_array([(new static), 'serialize'], func_get_args());
     }
 }

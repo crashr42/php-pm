@@ -26,7 +26,7 @@ class NewMasterCommand extends ControlCommand
         $bus = new Bus($connection, $manager);
 
         if ($manager->shutdownLock) {
-            $bus->send((new LogCommand())->serialize('Master in shutdown mode.'));
+            $bus->send(LogCommand::build('Master in shutdown mode.'));
 
             $connection->end();
 
@@ -58,30 +58,32 @@ class NewMasterCommand extends ControlCommand
 
             $manager->workersCollection()->removeWorker($worker);
 
-            $bus->send((new NewWorkerCommand())->serialize($worker->getPort()));
+            $bus->send(NewWorkerCommand::build($worker->getPort()));
 
             $message = sprintf('Shutdown http://%s:%s', $worker->getHost(), $worker->getPort());
             $manager->getLogger()->info($message);
-            $bus->send((new LogCommand())->serialize($message));
+            $bus->send(LogCommand::build($message));
 
             if (count($workers) > 0) {
                 $this->gracefulShutdown($bus, $manager, array_shift($workers), $workers);
             } else {
-                $bus->send((new LogCommand())->serialize('Last worker shutdown.'));
-                $bus->send((new PrepareMasterCommand())->serialize());
+                $bus->send(LogCommand::build('Last worker shutdown.'));
+                $bus->send(PrepareMasterCommand::build());
 
                 $manager->getLoop()->addTimer(2, function () use ($bus, $manager) {
+                    $manager->getLogger()->info(sprintf('Cluster migrate to new master at pid %s.', $this->data['pid']));
+
                     $manager->getLoop()->stop();
                 });
             }
         });
-        $bus->send((new LogCommand())->serialize(sprintf("Try shutdown http://%s:%s\n", $worker->getHost(), $worker->getPort())));
+        $bus->send(LogCommand::build(sprintf("Try shutdown http://%s:%s\n", $worker->getHost(), $worker->getPort())));
 
-        $worker->getConnection()->write((new ShutdownCommand())->serialize());
+        $worker->getConnection()->write(ShutdownCommand::build());
     }
 
     public function serialize()
     {
-        return json_encode(['cmd' => 'newMaster']);
+        return json_encode(['cmd' => 'newMaster', 'pid' => func_get_arg(0)]);
     }
 }

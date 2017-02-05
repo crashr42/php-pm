@@ -87,6 +87,8 @@ class MasterControlChannel extends EventEmitter
             $connection->on('close', function () {
                 if ($this->prepareMaster) {
                     $this->loop->addTimer(2, function () {
+                        $this->manager->getLogger()->info('Old cluster shutdown. Run control bus and start cluster.');
+
                         $this->runControlBus();
 
                         $this->emit('done');
@@ -101,7 +103,7 @@ class MasterControlChannel extends EventEmitter
             $this->on('workers_bus', function () use ($bus) {
                 $bus->run();
 
-                $bus->send((new NewMasterCommand())->serialize());
+                $bus->send(NewMasterCommand::build(getmypid()));
             });
 
             $this->runWorkerBus();

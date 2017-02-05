@@ -153,6 +153,8 @@ class ProcessManager
                     }
                 }
             }, $this));
+
+            $this->logger->info('Cluster up!');
         });
         $mc->run();
 
@@ -291,7 +293,7 @@ class ProcessManager
         });
         $client->write(sprintf('Try shutdown http://%s:%s', $worker->getHost(), $worker->getPort()));
 
-        $worker->getConnection()->write((new ShutdownCommand())->serialize());
+        $worker->getConnection()->write(ShutdownCommand::build());
     }
 
     /**
