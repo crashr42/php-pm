@@ -102,9 +102,10 @@ class ProcessManager
         $this->config                   = $config;
         $this->config->workers_min_port = $config->port + 2; // reverse 5500 and 5501
         $this->config->workers_max_port = $this->config->workers_min_port + ProcessWorker::MAX_WORKERS;
+        $this->config->master_pid       = getmypid();
         $this->workers                  = new WorkersCollection();
 
-        cli_set_process_title('react master');
+        cli_set_process_title(sprintf('[%d] react master', getmypid()));
 
         $this->logger = Logger::get(static::class, $config->log_file, $config->log_level);
 
@@ -246,13 +247,13 @@ class ProcessManager
      */
     public function clusterStatusAsJson()
     {
-        $data['pid']                 = getmypid();
-        $data['host']                = $this->config->host;
-        $data['port']                = $this->config->port;
-        $data['shutdown_lock']       = $this->shutdownLock;
+        $data['pid']                  = getmypid();
+        $data['host']                 = $this->config->host;
+        $data['port']                 = $this->config->port;
+        $data['shutdown_lock']        = $this->shutdownLock;
         $data['waited_workers']       = $this->waitedWorkers;
         $data['workers_count']        = count($this->workers);
-        $data['allow_new_instances'] = $this->allowNewInstances;
+        $data['allow_new_instances']  = $this->allowNewInstances;
         $data['workers_control_port'] = $this->config->workers_control_port;
 
         $data['workers'] = array_values(array_map(function ($worker) {

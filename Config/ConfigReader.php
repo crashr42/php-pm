@@ -27,6 +27,7 @@ namespace PHPPM\Config;
  * @property integer $workers_min_port
  * @property integer $workers_max_port
  * @property string check_url
+ * @property int master_pid
  */
 class ConfigReader extends \ArrayObject
 {

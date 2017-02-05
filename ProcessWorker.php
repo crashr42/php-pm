@@ -203,7 +203,8 @@ class ProcessWorker
                 $socket->listen($port, $this->config->host);
                 $this->port = $port;
                 $this->logger->info(sprintf('Listen worker on uri http://%s:%s', $this->config->host, $port));
-                cli_set_process_title(sprintf('react worker on port %s', $port));
+
+                cli_set_process_title(sprintf('[%d] react worker on port %s', $this->config->master_pid, $port));
                 break;
             } catch (ConnectionException $e) {
                 $port++;
