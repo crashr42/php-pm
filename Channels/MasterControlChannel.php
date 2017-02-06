@@ -77,7 +77,7 @@ class MasterControlChannel extends EventEmitter
 
             $connection->on('close', function () {
                 if ($this->prepareMaster) {
-                    $this->loop->addTimer(2, function () {
+                    $this->loop->addTimer(4, function () {
                         $this->manager->getLogger()->info('Old cluster shutdown. Run control bus and start cluster.');
 
                         $this->runControlBus();
