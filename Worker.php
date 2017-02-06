@@ -204,7 +204,7 @@ class Worker
             'cpu_percent' => $this->getCpuUsage(),
             'born_at'     => $this->getBornAt(),
             'ping_at'     => $this->getPingAt(),
-            'uptime'      => Carbon::parse($this->getBornAt())->diff(Carbon::parse($this->getPingAt()))->format('%Y-%M-%D %H:%M:%S'),
+            'uptime'      => Carbon::parse($this->getBornAt())->diffInSeconds(Carbon::parse($this->getPingAt())),
         ], function ($value) {
             return $value !== null;
         });
