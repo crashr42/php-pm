@@ -9,8 +9,8 @@
 
 namespace PHPPM\Channels;
 
-use Closure;
 use Evenement\EventEmitter;
+use Exception;
 use PHPPM\Bus;
 use PHPPM\Control\Commands\LogCommand;
 use PHPPM\Control\Commands\NewMasterCommand;
@@ -23,7 +23,6 @@ use PHPPM\Control\Commands\ShutdownCommand;
 use PHPPM\Control\Commands\StatusCommand;
 use PHPPM\Control\Commands\StopCommand;
 use PHPPM\Control\Commands\UnregisterCommand;
-use PHPPM\Control\ControlCommand;
 use PHPPM\ProcessManager;
 use React\EventLoop\LoopInterface;
 use React\Http\Request;
@@ -113,7 +112,16 @@ class MasterControlChannel extends EventEmitter
             $bus->def(RestartCommand::class);
             $bus->start();
         });
-        $controlServer->listen($this->manager->getConfig()->port, $this->manager->getConfig()->host);
+
+        for ($i = 0; $i < 5; ++$i) {
+            try {
+                $controlServer->listen($this->manager->getConfig()->port, $this->manager->getConfig()->host);
+
+                break;
+            } catch (Exception $e) {
+                $this->manager->getLogger()->debug('Wait stop old master.');
+            }
+        }
 
         $http = new \PHPPM\Server($controlServer);
         /** @noinspection PhpUnusedParameterInspection */

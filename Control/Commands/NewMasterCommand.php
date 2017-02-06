@@ -90,10 +90,12 @@ class NewMasterCommand extends ControlCommand
             $bus->send(LogCommand::build('Last worker shutdown.'));
             $bus->send(PrepareMasterCommand::build());
 
-            $manager->getLoop()->addTimer(2, function () use ($bus, $manager) {
+            $manager->getLoop()->addTimer(1, function () use ($bus, $manager) {
                 $manager->getLogger()->info(sprintf('Cluster migrate to new master at pid %s.', $this->data['pid']));
 
                 $manager->getLoop()->stop();
+
+                exit;
             });
         }
     }
