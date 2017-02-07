@@ -56,8 +56,8 @@ class Server extends EventEmitter implements ServerInterface
                     $conn->emit('resume');
                 });
             });
-            $parser->on('error', function ($exception) use ($conn) {
-                $conn->end("HTTP/1.1 500 Internal server error\nContent-Type: text/plain\n\n".$exception->getMessage());
+            $parser->on('error', function () use ($conn) {
+                $conn->end("HTTP/1.1 400 Bad Request\nContent-Type: text/plain\n\n");
             });
 
             $conn->on('data', [$parser, 'feed']);
