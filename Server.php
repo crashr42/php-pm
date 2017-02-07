@@ -59,6 +59,8 @@ class Server extends EventEmitter implements ServerInterface
             $parser->on('error', function () use ($conn) {
                 $conn->write('Invalid request.');
 
+                usleep(100 * 1000);
+
                 $conn->close();
             });
 
