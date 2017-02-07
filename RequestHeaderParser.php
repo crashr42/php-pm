@@ -17,7 +17,7 @@ use React\Http\Request;
 class RequestHeaderParser extends EventEmitter
 {
     private $buffer  = '';
-    private $maxSize = 8192;
+    private $maxSize = 131072;
 
     public function feed($data)
     {
