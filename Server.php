@@ -57,11 +57,7 @@ class Server extends EventEmitter implements ServerInterface
                 });
             });
             $parser->on('error', function () use ($conn) {
-                $conn->write('Invalid request.');
-
-                usleep(100 * 1000);
-
-                $conn->close();
+                $conn->end("HTTP/1.1 500 Internal server error\nContent-Type: text/plain\n\n");
             });
 
             $conn->on('data', [$parser, 'feed']);
