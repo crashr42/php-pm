@@ -26,7 +26,7 @@ class NewMasterCommand extends ControlCommand
     {
         $bus = new Bus($connection, $manager);
 
-        if ($manager->shutdownLock) {
+        if ($manager->inShutdownLock()) {
             $bus->send(LogCommand::build('Master in shutdown mode.'));
 
             $connection->end();
@@ -34,7 +34,7 @@ class NewMasterCommand extends ControlCommand
             return;
         }
 
-        $manager->shutdownLock = true;
+        $manager->setShutdownLock(true);
 
         $workers = $manager->workersCollection()->all();
 
@@ -67,7 +67,7 @@ class NewMasterCommand extends ControlCommand
     private function onWorkerShutdown(Bus $bus, ProcessManager $manager, Worker $worker, $workers)
     {
         if ($bus->isDie()) {
-            $manager->shutdownLock = false;
+            $manager->setShutdownLock(false);
 
             $manager->getLogger()->error('New master connection is die. Revert current master state.');
 

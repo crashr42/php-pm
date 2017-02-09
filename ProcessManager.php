@@ -51,7 +51,28 @@ class ProcessManager
     /**
      * @var bool
      */
-    public $shutdownLock = false;
+    protected $shutdownLock = false;
+
+    /**
+     * Move cluster to shutdown mode or revert to normal state.
+     * In shutdown mode cluster not spawn new workers.
+     *
+     * @param $shutdownLock
+     */
+    public function setShutdownLock($shutdownLock)
+    {
+        $this->shutdownLock = $shutdownLock;
+    }
+
+    /**
+     * Check cluster in shutdown mode.
+     *
+     * @return bool
+     */
+    public function inShutdownLock()
+    {
+        return $this->shutdownLock;
+    }
 
     /**
      * @var bool

@@ -18,7 +18,7 @@ class StopCommand extends ControlCommand
 {
     public function handle(Connection $connection, ProcessManager $manager)
     {
-        if ($manager->shutdownLock) {
+        if ($manager->inShutdownLock()) {
             $manager->getLogger()->warning('Cluster stop in progress ...');
             $connection->write('Cluster stop in progress ...');
             $connection->end();
@@ -27,7 +27,7 @@ class StopCommand extends ControlCommand
         }
 
         $manager->allowNewInstances = false;
-        $manager->shutdownLock      = true;
+        $manager->setShutdownLock(true);
 
         $workers = $manager->workersCollection()->all();
 
