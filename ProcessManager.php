@@ -61,6 +61,12 @@ class ProcessManager
      */
     public function setShutdownLock($shutdownLock)
     {
+        if ($shutdownLock) {
+            cli_set_process_title(sprintf('[%d] react master / shutdown', getmypid()));
+        } else {
+            cli_set_process_title(sprintf('[%d] react master', getmypid()));
+        }
+
         $this->shutdownLock = $shutdownLock;
     }
 
