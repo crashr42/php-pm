@@ -27,16 +27,18 @@ class NewMasterCommand extends ControlCommand
         $bus = new Bus($connection, $manager);
 
         if ($manager->inShutdownLock()) {
-            $bus->send(LogCommand::build('Master in shutdown mode.'));
+            $bus->send(LogCommand::build('Master already in shutdown mode.', Logger::WARNING));
 
-            $connection->end();
+            $manager->getLoop()->addTimer(1, function () use ($bus) {
+                $bus->stop();
+            });
 
             return;
         }
 
         $manager->setShutdownLock(true);
 
-        $workers = $manager->workersCollection()->all();
+        $workers = $manager->workers()->all();
 
         $this->gracefulShutdown($bus, $manager, array_shift($workers), $workers);
     }
@@ -76,7 +78,7 @@ class NewMasterCommand extends ControlCommand
             return;
         }
 
-        $manager->workersCollection()->removeWorker($worker);
+        $manager->workers()->removeWorker($worker);
 
         $bus->send(NewWorkerCommand::build($worker->getPort()));
 

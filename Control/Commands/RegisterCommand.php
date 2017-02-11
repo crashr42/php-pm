@@ -18,9 +18,9 @@ class RegisterCommand extends ControlCommand
 {
     public function handle(Connection $connection, ProcessManager $manager)
     {
-        $manager->waitedWorkers--;
+        if (count($manager->workers()) === $manager->getConfig()->workers) {
+            $manager->resetWaitedQueue();
 
-        if (count($manager->workersCollection()) === $manager->getConfig()->workers) {
             $manager->getLogger()->warning('All workers already spawned. Reject worker.');
 
             $connection->end();
@@ -36,14 +36,14 @@ class RegisterCommand extends ControlCommand
         $newWorker->setPingAt(date('Y-m-d H:i:s O'));
         $newWorker->setBornAt(date('Y-m-d H:i:s O'));
 
-        $isNew = count(array_filter($manager->workersCollection()->all(), function ($worker) use ($newWorker) {
+        $isNew = count(array_filter($manager->workers()->all(), function ($worker) use ($newWorker) {
                 /** @var Worker $worker */
                 return $newWorker->equals($worker);
             })) === 0;
 
         if ($isNew) {
             $manager->getLogger()->info(sprintf('New worker %s up and ready.', $newWorker->getPort()));
-            $manager->workersCollection()->addWorker($newWorker);
+            $manager->addWorker($newWorker);
         }
     }
 

@@ -19,9 +19,9 @@ class UnregisterCommand extends ControlCommand
     {
         $pid = $this->data['pid'];
         $manager->getLogger()->warning(sprintf("Worker died. (pid %d)\n", $pid));
-        foreach ($manager->workersCollection()->all() as $worker) {
+        foreach ($manager->workers()->all() as $worker) {
             if ($worker->equalsByPid($pid)) {
-                $manager->workersCollection()->removeWorker($worker);
+                $manager->workers()->removeWorker($worker);
             }
         }
         $manager->checkWorkers();

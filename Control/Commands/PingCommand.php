@@ -17,7 +17,7 @@ class PingCommand extends ControlCommand
 {
     public function handle(Connection $connection, ProcessManager $manager)
     {
-        $workers = $manager->workersCollection();
+        $workers = $manager->workers();
 
         foreach ($workers->all() as $worker) {
             $status = $this->data['status'];

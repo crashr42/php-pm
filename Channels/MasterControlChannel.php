@@ -10,7 +10,6 @@
 namespace PHPPM\Channels;
 
 use Evenement\EventEmitter;
-use Exception;
 use PHPPM\Bus;
 use PHPPM\Control\Commands\LogCommand;
 use PHPPM\Control\Commands\NewMasterCommand;
@@ -23,12 +22,12 @@ use PHPPM\Control\Commands\ShutdownCommand;
 use PHPPM\Control\Commands\StatusCommand;
 use PHPPM\Control\Commands\StopCommand;
 use PHPPM\Control\Commands\UnregisterCommand;
+use PHPPM\Libs\NetUtils;
 use PHPPM\ProcessManager;
 use React\EventLoop\LoopInterface;
 use React\Http\Request;
 use React\Http\Response;
 use React\Socket\Connection;
-use React\Socket\ConnectionException;
 use React\Socket\Server;
 
 class MasterControlChannel extends EventEmitter
@@ -56,48 +55,50 @@ class MasterControlChannel extends EventEmitter
 
     public function run()
     {
-        try {
+        if (NetUtils::portIsClose($this->manager->getConfig()->port, $this->manager->getConfig()->host)) {
             $this->runControlBus();
 
             $this->runWorkerBus();
 
             $this->emit('done');
-        } catch (ConnectionException $e) {
-            $this->manager->getLogger()->info('Another master already running. Restart it and start new master.');
 
-            $connection = stream_socket_client(sprintf('tcp://%s:%s', $this->manager->getConfig()->host, $this->manager->getConfig()->port));
-            $connection = new Connection($connection, $this->loop);
-            $bus        = new Bus($connection, $this->manager);
-            $bus->def(NewWorkerCommand::class);
-            $bus->on(PrepareMasterCommand::class, function () {
-                $this->prepareMaster = true;
-            });
-            $bus->def(LogCommand::class);
-
-            $connection->on('close', function () {
-                if ($this->prepareMaster) {
-                    $this->loop->addTimer(4, function () {
-                        $this->manager->getLogger()->info('Old cluster shutdown. Run control bus and start cluster.');
-
-                        $this->runControlBus();
-
-                        $this->emit('done');
-                    });
-                } else {
-                    $this->manager->getLogger()->err('Old master don\'t send prepare command.');
-
-                    exit;
-                }
-            });
-
-            $this->on('workers_bus', function () use ($bus) {
-                $bus->start();
-
-                $bus->send(NewMasterCommand::build(getmypid()));
-            });
-
-            $this->runWorkerBus();
+            return;
         }
+
+        $this->manager->getLogger()->info('Stop old master and start new master.');
+
+        $connection = stream_socket_client(sprintf('tcp://%s:%s', $this->manager->getConfig()->host, $this->manager->getConfig()->port));
+        $connection = new Connection($connection, $this->loop);
+        $bus        = new Bus($connection, $this->manager);
+        $bus->def(NewWorkerCommand::class);
+        $bus->on(PrepareMasterCommand::class, function () {
+            $this->prepareMaster = true;
+        });
+        $bus->def(LogCommand::class);
+
+        $connection->on('close', function () {
+            if ($this->prepareMaster) {
+                $this->loop->addTimer(4, function () {
+                    $this->manager->getLogger()->info('Old cluster shutdown. Run control bus and start cluster.');
+
+                    $this->runControlBus();
+
+                    $this->emit('done');
+                });
+            } else {
+                $this->manager->getLogger()->err('Old master don\'t send prepare command.');
+
+                exit;
+            }
+        });
+
+        $this->on('workers_bus', function () use ($bus) {
+            $bus->start();
+
+            $bus->send(NewMasterCommand::build(getmypid()));
+        });
+
+        $this->runWorkerBus();
     }
 
     private function runControlBus()
@@ -113,15 +114,7 @@ class MasterControlChannel extends EventEmitter
             $bus->start();
         });
 
-        for ($i = 0; $i < 5; ++$i) {
-            try {
-                $controlServer->listen($this->manager->getConfig()->port, $this->manager->getConfig()->host);
-
-                break;
-            } catch (Exception $e) {
-                $this->manager->getLogger()->debug('Wait stop old master.');
-            }
-        }
+        $controlServer->listen($this->manager->getConfig()->port, $this->manager->getConfig()->host);
 
         $http = new \PHPPM\Server($controlServer);
         /** @noinspection PhpUnusedParameterInspection */
@@ -141,7 +134,7 @@ class MasterControlChannel extends EventEmitter
             $bus->def(PingCommand::class);
 
             $connection->on('close', function () use ($connection) {
-                foreach ($this->manager->workersCollection()->all() as $worker) {
+                foreach ($this->manager->workers()->all() as $worker) {
                     if ($worker->equalsByConnection($connection)) {
                         $this->manager->removeWorker($worker);
                     }
@@ -150,18 +143,23 @@ class MasterControlChannel extends EventEmitter
 
             $bus->start();
         });
-        $this->manager->getConfig()->workers_control_port = $this->manager->getConfig()->port - 1;
+
+        $config = $this->manager->getConfig();
+
+        $config->workers_control_port = $config->port - 1;
 
         for ($i = 5; $i > 0; $i--) {
-            try {
-                $workersServer->listen($this->manager->getConfig()->workers_control_port, $this->manager->getConfig()->host);
+            if (NetUtils::portIsClose($config->workers_control_port, $config->host)) {
+                $workersServer->listen($config->workers_control_port, $config->host);
+
+                $this->manager->getLogger()->info(sprintf('Use workers_control_port: %d', $config->workers_control_port));
 
                 $this->emit('workers_bus');
 
                 break;
-            } catch (ConnectionException $e) {
-                $this->manager->getConfig()->workers_control_port--;
             }
+
+            $config->workers_control_port--;
         }
     }
 }

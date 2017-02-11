@@ -27,7 +27,7 @@ class RestartCommand extends ControlCommand
 
         $manager->setShutdownLock(true);
 
-        $workers = $manager->workersCollection()->all();
+        $workers = $manager->workers()->all();
 
         $manager->gracefulShutdown(array_pop($workers), $workers, $connection);
     }

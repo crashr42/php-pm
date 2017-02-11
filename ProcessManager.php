@@ -17,24 +17,18 @@ use React\Socket\Server;
 class ProcessManager
 {
     /**
+     * Contains all workers spawned by master.
+     *
      * @var WorkersCollection
      */
     protected $workers;
 
     /**
+     * Main event loop.
+     *
      * @var LoopInterface
      */
     protected $loop;
-
-    /**
-     * @var Server
-     */
-    protected $controller;
-
-    /**
-     * @var Server
-     */
-    protected $web;
 
     /**
      * Whether the server is up and thus creates new workers when they die or not.
@@ -44,80 +38,39 @@ class ProcessManager
     protected $running = false;
 
     /**
+     * Main logger.
+     *
      * @var \Monolog\Logger|Logger
      */
     protected $logger;
 
     /**
+     * Disallow spawn new workers if master in shutdown mode.
+     *
      * @var bool
      */
     protected $shutdownLock = false;
 
     /**
-     * Move cluster to shutdown mode or revert to normal state.
-     * In shutdown mode cluster not spawn new workers.
+     * hmm
      *
-     * @param $shutdownLock
-     */
-    public function setShutdownLock($shutdownLock)
-    {
-        if ($shutdownLock) {
-            cli_set_process_title(sprintf('[%d] react master / shutdown', getmypid()));
-        } else {
-            cli_set_process_title(sprintf('[%d] react master', getmypid()));
-        }
-
-        $this->shutdownLock = $shutdownLock;
-    }
-
-    /**
-     * Check cluster in shutdown mode.
-     *
-     * @return bool
-     */
-    public function inShutdownLock()
-    {
-        return $this->shutdownLock;
-    }
-
-    /**
      * @var bool
      */
-    public $allowNewInstances = true;
+    protected $allowNewInstances = true;
 
     /**
+     * Waited workers count.
+     *
      * @var int
      */
-    public $waitedWorkers = 0;
+    protected $waitedWorkers = 0;
 
     /**
+     * Main config.
+     *
      * @var ConfigReader
      */
     protected $config;
-
-    /**
-     * @return ConfigReader
-     */
-    public function getConfig()
-    {
-        return $this->config;
-    }
-
-    /**
-     * @return LoopInterface
-     */
-    public function getLoop()
-    {
-        return $this->loop;
-    }
-
-    /**
-     * @return \Monolog\Logger|Logger
-     */
-    public function getLogger()
-    {
-        return $this->logger;
-    }
 
     /**
      * Create process manager.
@@ -138,7 +91,7 @@ class ProcessManager
 
         set_error_handler(function ($errno, $errstr, $errfile, $errline) {
             $this->logger->crit(sprintf('"[%s] %s" in %s:%s', $errno, $errstr, $errfile, $errline), func_get_args());
-        });
+        }, E_ALL ^ E_WARNING);
 
         $this->logger->info('Config: '.json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
@@ -243,7 +196,7 @@ class ProcessManager
     {
         $this->logger->debug('Fork new worker.');
 
-        if (count($this->workersCollection()) === $this->config->workers) {
+        if (count($this->workers()) === $this->config->workers) {
             $this->logger->warning('All workers already spawned. Reject worker.');
 
             return;
@@ -358,12 +311,99 @@ class ProcessManager
     }
 
     /**
+     * Add worker to collection and wait it register.
+     *
+     * @param Worker $worker
+     */
+    public function addWorker(Worker $worker)
+    {
+        $this->waitedWorkers--;
+
+        $this->workers()->addWorker($worker);
+    }
+
+    /**
      * Get workers collection.
      *
      * @return WorkersCollection
      */
-    public function workersCollection()
+    public function workers()
     {
         return $this->workers;
+    }
+
+    /**
+     * Move cluster to shutdown mode or revert to normal state.
+     * In shutdown mode cluster not spawn new workers.
+     *
+     * @param $shutdownLock
+     */
+    public function setShutdownLock($shutdownLock)
+    {
+        if ($shutdownLock) {
+            cli_set_process_title(sprintf('[%d] react master / shutdown', getmypid()));
+        } else {
+            cli_set_process_title(sprintf('[%d] react master', getmypid()));
+        }
+
+        $this->shutdownLock = $shutdownLock;
+    }
+
+    /**
+     * Check cluster in shutdown mode.
+     *
+     * @return bool
+     */
+    public function inShutdownLock()
+    {
+        return $this->shutdownLock;
+    }
+
+    /**
+     * Allow or disallow new workers instances.
+     *
+     * @param bool $allowNewInstances
+     */
+    public function setAllowNewInstances($allowNewInstances)
+    {
+        $this->allowNewInstances = $allowNewInstances;
+    }
+
+    /**
+     * Don't wait any workers.
+     */
+    public function resetWaitedQueue()
+    {
+        $this->waitedWorkers = 0;
+    }
+
+    /**
+     * Get main config.
+     *
+     * @return ConfigReader
+     */
+    public function getConfig()
+    {
+        return $this->config;
+    }
+
+    /**
+     * Get main event loop.
+     *
+     * @return LoopInterface
+     */
+    public function getLoop()
+    {
+        return $this->loop;
+    }
+
+    /**
+     * Get manager logger.
+     *
+     * @return \Monolog\Logger|Logger
+     */
+    public function getLogger()
+    {
+        return $this->logger;
     }
 }

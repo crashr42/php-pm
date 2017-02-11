@@ -43,8 +43,8 @@ class BalancerControlChannel
     public function onWeb(Connection $incoming)
     {
         do {
-            $workers  = array_values($this->manager->workersCollection()->activeWorkers());
-            $workerId = $this->manager->workersCollection()->getNextWorker();
+            $workers  = array_values($this->manager->workers()->activeWorkers());
+            $workerId = $this->manager->workers()->getNextWorker();
         } while (!array_key_exists($workerId, $workers));
 
         /** @var Worker $worker */

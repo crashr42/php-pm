@@ -25,7 +25,7 @@ class Logger
      */
     public static function get($class, $logFile, $level = 'debug', $pid)
     {
-        $lineFormatter = new LineFormatter($pid, '[%datetime%] %channel%.%level_name% [%pid]: %message% %context% %extra%', null, true, true);
+        $lineFormatter = new LineFormatter($pid, '[%datetime%] [%pid] %channel%.%level_name%: %message% %context% %extra%', null, true, true);
 
         /** @noinspection CallableParameterUseCaseInTypeContextInspection */
         $level = \Monolog\Logger::toMonologLevel($level);
